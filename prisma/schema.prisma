@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RecordingStatus {
+  UPLOADED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum SummaryTemplate {
+  MEETING
+  CLASS
+  INTERVIEW
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  recordings Recording[]
+}
+
+model Recording {
+  id              String          @id @default(uuid()) @db.Uuid
+  userId          String          @db.Uuid
+  title           String
+  s3Key           String
+  durationSec     Int?
+  status          RecordingStatus @default(UPLOADED)
+  transcribeJobId String?
+  errorMessage    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transcription Transcription?
+  summaries     Summary[]
+
+  @@index([userId])
+}
+
+model Transcription {
+  id          String   @id @default(uuid()) @db.Uuid
+  recordingId String   @unique @db.Uuid
+  language    String   @default("es-US")
+  fullText    String
+  segments    Json? // [{ speaker, startMs, endMs, text }]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+}
+
+model Summary {
+  id          String          @id @default(uuid()) @db.Uuid
+  recordingId String          @db.Uuid
+  template    SummaryTemplate
+  content     String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+
+  @@index([recordingId])
+}
