@@ -22,11 +22,11 @@ enum SummaryTemplate {
 
 model User {
   id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String
-  name         String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  cognitoSub String   @unique
+  email      String   @unique
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   recordings Recording[]
 }

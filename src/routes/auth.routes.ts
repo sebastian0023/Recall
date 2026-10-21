@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { login, me, register } from "../controllers/auth.controller.js";
+import { confirm, login, me, register } from "../controllers/auth.controller.js";
 import { auth } from "../middlewares/auth.js";
 
 const router = Router();
 
 router.post("/register", register);
+router.post("/confirm", confirm);
 router.post("/login", login);
 router.get("/me", auth, me);
 
