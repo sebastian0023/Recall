@@ -43,7 +43,7 @@ model Recording {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   transcription Transcription?
   summaries     Summary[]
 
@@ -59,7 +59,7 @@ model Transcription {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Restrict)
 }
 
 model Summary {
@@ -70,7 +70,7 @@ model Summary {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  recording Recording @relation(fields: [recordingId], references: [id], onDelete: Restrict)
 
   @@index([recordingId])
 }

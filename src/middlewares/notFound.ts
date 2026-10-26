@@ -1,5 +1,6 @@
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
+import { ApiError } from "../lib/apiError.js";
 
-export function notFound(_req: Request, res: Response) {
-    res.status(404).json({ error: { message: "Route not found" } });
+export function notFound(_req: Request, _res: Response, next: NextFunction) {
+    next(new ApiError(404, "Route not found"));
 }

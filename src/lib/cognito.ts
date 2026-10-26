@@ -5,11 +5,20 @@ import { env } from "../config/env.js";
 
 export const cognito = new CognitoIdentityProviderClient({ region: env.AWS_REGION });
 
-export const accessTokenVerifier = CognitoJwtVerifier.create({
-    userPoolId: env.COGNITO_USER_POOL_ID,
-    clientId: env.COGNITO_CLIENT_ID,
-    tokenUse: "access"
-});
+// Se crea al primer uso para que el API pueda arrancar en AUTH_MODE=dummy sin variables de Cognito
+let verifier: ReturnType<typeof createVerifier> | undefined;
+
+function createVerifier() {
+    return CognitoJwtVerifier.create({
+        userPoolId: env.COGNITO_USER_POOL_ID,
+        clientId: env.COGNITO_CLIENT_ID,
+        tokenUse: "access"
+    });
+}
+
+export function getAccessTokenVerifier() {
+    return (verifier ??= createVerifier());
+}
 
 // Cognito exige SECRET_HASH cuando el app client tiene client secret
 export function secretHash(username: string): string | undefined {
