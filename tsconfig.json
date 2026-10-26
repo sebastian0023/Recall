@@ -9,5 +9,12 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "src/lib/aws.ts",
+    "src/lib/prompt.ts",
+    "src/lib/transcribe.ts"
+  ]
 }

@@ -1,37 +1,45 @@
-import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
-import { dummySummaries, type CreateSummaryInput, type Summary, type UpdateSummaryInput } from "../models/summary.model.js";
+import { ApiError } from "../lib/apiError.js";
+import { prisma } from "../lib/prisma.js";
+import type { CreateSummaryInput, SummaryTemplate, UpdateSummaryInput } from "../models/summary.model.js";
 
-function findSummary(id: string): Summary {
-    return dummySummaries.find((s) => s.id === id) ?? { ...dummySummaries[0]!, id };
-}
+export async function getSummaries(_req: Request, res: Response) {
+    // Filtros opcionales ya validados por el middleware (?recordingId=&template=)
+    const { recordingId, template } = res.locals.query as { recordingId?: string; template?: SummaryTemplate };
+    const summaries = await prisma.summary.findMany({
+        where: { recordingId, template },
+        orderBy: { createdAt: "desc" },
+        include: { recording: { select: { id: true, title: true, status: true } } },
+    });
 
-export function getSummaries(_req: Request, res: Response) {
     res.status(200).json({
-        data: dummySummaries,
-        message: "Summaries list"
+        data: summaries,
+        message: "Summaries list",
     });
 }
 
-export function getSummaryById(req: Request, res: Response) {
+export async function getSummaryById(req: Request, res: Response) {
+    const summary = await prisma.summary.findUnique({
+        where: { id: req.params.id as string },
+        include: { recording: true },
+    });
+    if (!summary) throw new ApiError(404, "Summary not found");
+
     res.status(200).json({
-        data: findSummary(req.params.id as string),
-        message: "Summary found"
+        data: summary,
+        message: "Summary found",
     });
 }
 
-export function createSummary(req: Request, res: Response) {
-    const { recordingId, template } = req.body as CreateSummaryInput;
-    const now = new Date();
+export async function createSummary(req: Request, res: Response) {
+    const { recordingId, template, content } = req.body as CreateSummaryInput;
 
-    const summary: Summary = {
-        id: randomUUID(),
-        recordingId,
-        template,
-        content: "Resumen generado automáticamente",
-        createdAt: now,
-        updatedAt: now,
-    };
+    const recording = await prisma.recording.findUnique({ where: { id: recordingId } });
+    if (!recording) throw new ApiError(404, "Recording not found");
+
+    const summary = await prisma.summary.create({
+        data: { recordingId, template, content },
+    });
 
     res.status(201).json({
         data: summary,
@@ -39,16 +47,22 @@ export function createSummary(req: Request, res: Response) {
     });
 }
 
-export function updateSummary(req: Request, res: Response) {
-    const changes = req.body as UpdateSummaryInput;
-    const summary = findSummary(req.params.id as string);
+export async function updateSummary(req: Request, res: Response) {
+    const { template, content } = req.body as UpdateSummaryInput;
+
+    const summary = await prisma.summary.update({
+        where: { id: req.params.id as string },
+        data: { template, content },
+    });
 
     res.status(200).json({
-        data: { ...summary, ...changes, updatedAt: new Date() },
+        data: summary,
         message: "Summary updated",
     });
 }
 
-export function deleteSummary(_req: Request, res: Response) {
+export async function deleteSummary(req: Request, res: Response) {
+    // Inexistente -> P2025 -> 404 (errorHandler)
+    await prisma.summary.delete({ where: { id: req.params.id as string } });
     res.status(204).send();
 }
