@@ -1,0 +1,47 @@
+<p><a href="/recordings">← Grabaciones</a></p>
+
+<h1>{{recording.title}}</h1>
+<p>{{> status status=recording.status}}</p>
+
+<dl class="meta">
+  <dt>Usuario</dt><dd>{{recording.user.name}} <span class="muted">({{recording.user.email}})</span></dd>
+  <dt>Duración</dt><dd>{{duration recording.durationSec}}</dd>
+  <dt>Archivo (S3)</dt><dd><code>{{recording.s3Key}}</code></dd>
+  <dt>Creada</dt><dd>{{date recording.createdAt}}</dd>
+  <dt>Actualizada</dt><dd>{{date recording.updatedAt}}</dd>
+  {{#if recording.errorMessage}}
+    <dt>Error</dt><dd class="error-text">{{recording.errorMessage}}</dd>
+  {{/if}}
+</dl>
+
+<h2>Transcripción</h2>
+{{#with recording.transcription}}
+  <p class="muted">Idioma: {{language}}</p>
+  {{#if segments.length}}
+    <ol class="segments">
+      {{#each segments}}
+        <li>
+          <span class="time">{{ms startMs}}–{{ms endMs}}</span>
+          <strong>{{speaker}}:</strong> {{text}}
+        </li>
+      {{/each}}
+    </ol>
+  {{else}}
+    <p>{{fullText}}</p>
+  {{/if}}
+{{else}}
+  <p class="empty">Esta grabación todavía no tiene transcripción.</p>
+{{/with}}
+
+<h2>Resúmenes ({{recording.summaries.length}})</h2>
+{{#if recording.summaries.length}}
+  {{#each recording.summaries}}
+    <article class="card">
+      <h3>{{templateLabel template}}</h3>
+      <pre class="summary">{{content}}</pre>
+      <p class="muted">Creado {{date createdAt}}</p>
+    </article>
+  {{/each}}
+{{else}}
+  <p class="empty">Sin resúmenes.</p>
+{{/if}}

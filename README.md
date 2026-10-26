@@ -8,7 +8,12 @@
 - Conexión a la BD al arrancar (si falla, mensaje claro y el proceso termina).
 - Códigos HTTP correctos (200/201/204/400/404/409) y errores traducidos en un middleware central.
 - Validación de body, params y query con zod antes de llegar al controlador, con el error indicando qué campo falló.
-- Pendiente en esta rama de trabajo: seed, colección de peticiones y vistas.
+- Datos de prueba repetibles con `npm run seed`.
+- Colección de Postman en [docs/api.postman_collection.json](docs/api.postman_collection.json), con casos de error.
+- Vistas con Handlebars (layout con navegación, listado y detalle de grabaciones) con datos reales de la BD.
+- CI/CD con GitHub Actions: ESLint, typecheck/build, migraciones + seed + colección, SonarQube e imagen Docker.
+
+El documento del proyecto (versión 2) está en la raíz: [documentacion.pdf](documentacion.pdf). Su fuente editable es [docs/documentacion.md](docs/documentacion.md): para regenerar el PDF, abre el archivo en VS Code con la extensión **Markdown PDF** (`yzane.markdown-pdf`, recomendada en `.vscode/extensions.json`), haz clic derecho → *Markdown PDF: Export (pdf)* y reemplaza `documentacion.pdf` en la raíz con el resultado. El encabezado y el pie de página ya están configurados en `.vscode/settings.json`.
 
 ## Stack
 
@@ -20,6 +25,8 @@
 | Framework | Express 5 |
 | Base de datos | PostgreSQL 17 (Docker Compose) |
 | ORM | Prisma 7 |
+| Vistas | Handlebars (express-handlebars) |
+| Linter | ESLint + typescript-eslint |
 | Gestor de paquetes | npm |
 
 ## Requisitos
@@ -34,14 +41,17 @@ npm ci
 cp .env.example .env
 docker compose up -d
 npx prisma migrate deploy
+npm run seed
 npm run build && npm start
 ```
 
 1. `npm ci` instala las dependencias y genera el cliente de Prisma (`postinstall`).
-2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml`.
-3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`).
+2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml` (incluye `AUTH_MODE=dummy`, necesario para probar sin Cognito).
+3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`). Espera unos segundos a que acepte conexiones antes del siguiente paso.
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
-5. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar imprime `Connected to the database...`.
+5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
+6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar imprime `Connected to the database...`.
+7. Abre <http://localhost:3000> para ver las vistas, e importa la colección de Postman para probar el API.
 
 Para desarrollo: `npm run dev` (recarga automática).
 
@@ -79,14 +89,82 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `npm run db:deploy` | `prisma migrate deploy` (aplica migraciones existentes) |
 | `npm run db:migrate` | `prisma migrate dev` (crea una migración nueva en desarrollo) |
 | `npm run db:generate` | `prisma generate` |
+| `npm run seed` | `tsx prisma/seed.ts` (limpia y carga los datos de prueba) |
+| `npm run lint` | ESLint sobre todo el proyecto (`npm run lint:fix` corrige lo automático) |
+| `npm run typecheck` | `tsc --noEmit` |
+
+## Datos de prueba (seed)
+
+`npm run seed` ([prisma/seed.ts](prisma/seed.ts)) borra el contenido de las 4 tablas y vuelve a cargar los mismos registros dentro de una transacción. Se puede correr las veces que sea sin errores ni duplicados.
+
+| Entidad | Registros | Notas |
+| --- | --- | --- |
+| `User` | 6 | Uno de ellos (Diego) sin grabaciones, para probar el borrado |
+| `Recording` | 8 | Repartidas entre 5 usuarios y con los 4 estados (`UPLOADED`, `PROCESSING`, `DONE`, `FAILED`) |
+| `Transcription` | 5 | Una por cada grabación `DONE`, con segmentos por hablante |
+| `Summary` | 6 | De las 3 plantillas; una grabación tiene 2 resúmenes |
+
+Los ids son fijos y fáciles de reconocer (`11111111-…-000000000001` = user 1, `22222222-…` = recordings, `33333333-…` = transcriptions, `44444444-…` = summaries), así la colección de Postman funciona justo después del seed.
+
+## Colección de peticiones
+
+[docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
+
+- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries y Errores generales.
+- Al menos una petición por endpoint, más los casos de error: cuerpo inválido, id inexistente, id mal formado, duplicado (409), JSON mal formado y ruta inexistente.
+- La URL base es la variable de colección `{{baseUrl}}` (por defecto `http://localhost:3000`). Si cambias el puerto, cambia solo esa variable.
+- Las variables `userId`, `recordingId`, `transcriptionId` y `summaryId` apuntan a registros del seed; `newUserId`, `newRecordingId`, etc. se llenan solas al crear recursos.
+- Cada petición trae pruebas del status esperado. Para correr toda la colección en orden: **Run collection** en Postman, o desde la terminal:
+
+```bash
+npx newman run docs/api.postman_collection.json
+```
+
+## Vistas
+
+Hechas con Handlebars ([express-handlebars](https://github.com/express-handlebars/express-handlebars)) y servidas por el mismo API, fuera de `/api/v1`. Las plantillas están en [views/](views/) y el CSS en [public/](public/).
+
+| Ruta | Vista |
+| --- | --- |
+| `GET /` | Inicio: conteo de cada tabla y últimas grabaciones |
+| `GET /recordings` | Listado de grabaciones con su usuario, estado, duración y número de resúmenes; filtro por estado (`?status=DONE`) |
+| `GET /recordings/:id` | Detalle: datos de la grabación, usuario, transcripción por hablante y resúmenes |
+| `GET /users` | Listado de usuarios con su número de grabaciones |
+
+Todas usan el layout [views/layouts/main.hbs](views/layouts/main.hbs) con la barra de navegación. Los parámetros se validan con el mismo middleware `validate` del API: un id mal formado muestra una página de error 400, y uno inexistente, una página 404.
+
+## CI/CD (GitHub Actions)
+
+Los workflows están en [.github/workflows/](.github/workflows/) y corren en cada `git push` (cualquier rama) y en los Pull Requests hacia `develop` y `main`.
+
+| Workflow | Qué hace |
+| --- | --- |
+| `ci.yml` | **Lint** (ESLint), **typecheck + build** (`prisma validate`, `tsc`) y un job con PostgreSQL de servicio que aplica las migraciones, corre el seed dos veces (para comprobar que es repetible), arranca el API, corre la colección de Postman con newman y revisa que las vistas muestren datos |
+| `sonarqube.yml` | Análisis de SonarQube Cloud con el reporte de ESLint y **Quality Gate**: si no pasa, el workflow falla |
+| `docker.yml` | Construye la imagen con el [Dockerfile](Dockerfile); en push a `develop`/`main` la publica en GitHub Container Registry (`ghcr.io/<owner>/recall-api`) |
+
+Para que SonarQube funcione hay que configurarlo una vez:
+
+1. Entrar a <https://sonarcloud.io> con GitHub e importar el repositorio (organización `sebastian0023`).
+2. En el proyecto, **Administration → Analysis Method**: desactivar *Automatic Analysis* (se usa el de GitHub Actions).
+3. Generar un token (**My Account → Security**) y guardarlo en GitHub como secreto del repositorio `SONAR_TOKEN` (**Settings → Secrets and variables → Actions**).
+4. Si la organización o la llave del proyecto son distintas, actualizarlas en [sonar-project.properties](sonar-project.properties).
 
 ## Estructura
 
 ```
 recall-api/
+├── .github/workflows/        # CI/CD: ci, sonarqube, docker
+├── docs/
+│   ├── api.postman_collection.json
+│   ├── documentacion.md      # fuente editable del documento (Markdown PDF)
+│   └── img/                  # logo y diagramas del documento
 ├── prisma/
 │   ├── schema.prisma         # esquema de la base de datos
-│   └── migrations/           # migraciones versionadas
+│   ├── migrations/           # migraciones versionadas
+│   └── seed.ts               # datos de prueba (npm run seed)
+├── public/                   # CSS de las vistas
+├── views/                    # plantillas Handlebars (layouts/, recordings/, users/)
 ├── src/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
@@ -95,9 +173,13 @@ recall-api/
 │   ├── middlewares/          # auth, validate, errorHandler, notFound
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
 │   ├── models/               # tipos TypeScript por entidad
-│   ├── controllers/          # lógica de cada endpoint (consultas con Prisma)
-│   └── routes/               # un Router por módulo + index.ts
+│   ├── controllers/          # lógica de cada endpoint (consultas con Prisma) + vistas
+│   └── routes/               # un Router por módulo + index.ts + view.routes.ts
 ├── docker-compose.yml
+├── Dockerfile
+├── eslint.config.js
+├── sonar-project.properties
+├── documentacion.pdf         # documento del proyecto (versión 2)
 ├── prisma.config.ts
 ├── .env.example
 └── package.json
@@ -199,5 +281,5 @@ Formato de respuesta:
 
 ## Integrantes
 
-- **Integrante 1:** auth, users, recordings
-- **Integrante 2:** transcriptions, summaries, Prisma y Docker
+- **Daniel Sebastián Macías Macías:** conexión, modelos, CRUD, validaciones, manejo de errores y autenticación
+- **Emilio Daniel Guzmán Seda:** seed, vistas con Handlebars, colección de Postman y CI/CD
