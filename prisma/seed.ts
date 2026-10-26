@@ -1,10 +1,6 @@
-// Datos de prueba: `npm run seed`
-// Limpia las 4 tablas y vuelve a cargar los mismos registros, así que se puede correr varias veces
-// sin errores ni duplicados. Los ids son fijos para que la colección de Postman pueda usarlos.
 import { prisma } from "../src/lib/prisma.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 
-// UUID v4 válidos y fáciles de reconocer: 11111111-1111-4111-8111-000000000001 = user 1
 const id = (d: string, n: number) => `${d.repeat(8)}-${d.repeat(4)}-4${d.repeat(3)}-8${d.repeat(3)}-${String(n).padStart(12, "0")}`;
 const USER = (n: number) => id("1", n);
 const REC = (n: number) => id("2", n);
@@ -17,7 +13,6 @@ const users: Prisma.UserCreateManyInput[] = [
     { id: USER(3), cognitoSub: "seed-ana", email: "ana.lopez@recall.app", name: "Ana López" },
     { id: USER(4), cognitoSub: "seed-carlos", email: "carlos.ramirez@recall.app", name: "Carlos Ramírez" },
     { id: USER(5), cognitoSub: "seed-mariana", email: "mariana.torres@recall.app", name: "Mariana Torres" },
-    // Sin grabaciones: sirve para probar que DELETE /users/:id sí borra cuando no hay dependientes
     { id: USER(6), cognitoSub: "seed-diego", email: "diego.hernandez@recall.app", name: "Diego Hernández" },
 ];
 
@@ -107,7 +102,6 @@ const summaries: Prisma.SummaryCreateManyInput[] = [
 ];
 
 async function main() {
-    // Se borra en orden inverso a las llaves foráneas (son RESTRICT) y se inserta todo en una transacción
     await prisma.$transaction([
         prisma.summary.deleteMany(),
         prisma.transcription.deleteMany(),

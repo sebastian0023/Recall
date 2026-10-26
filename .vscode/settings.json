@@ -1,5 +1,4 @@
 {
-  // Markdown PDF: encabezado y pie como en la plantilla del documento (docs/documentacion.md)
   "markdown-pdf.displayHeaderFooter": true,
   "markdown-pdf.headerTemplate": "<div style=\"font-size: 8px; width: 100%; margin: 0 1.5cm; display: flex; justify-content: space-between;\"><span>Tecnologías de desarrollo en el servidor</span><span>Ing. Francisco Javier Sevilla Medina</span></div>",
   "markdown-pdf.footerTemplate": "<div style=\"font-size: 8px; width: 100%; margin: 0 1.5cm; text-align: right;\">Página <span class=\"pageNumber\"></span> de <span class=\"totalPages\"></span></div>",

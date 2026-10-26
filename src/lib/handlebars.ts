@@ -24,14 +24,12 @@ export const hbsEngine = engine({
         templateLabel: (template: string) => TEMPLATE_LABELS[template] ?? template,
         lower: (value: string) => String(value).toLowerCase(),
         date: (value: Date | string) => dateFormat.format(new Date(value)),
-        // 3120 -> "52:00"; null -> "—"
         duration: (sec: number | null | undefined) => {
             if (sec === null || sec === undefined) return "—";
             const m = Math.floor(sec / 60);
             const s = String(sec % 60).padStart(2, "0");
             return `${m}:${s}`;
         },
-        // milisegundos -> "m:ss" para los segmentos de la transcripción
         ms: (value: number) => {
             const total = Math.floor(value / 1000);
             return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;

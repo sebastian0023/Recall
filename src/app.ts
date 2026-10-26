@@ -9,7 +9,6 @@ import viewRoutes from "./routes/view.routes.js";
 
 const app = express();
 
-// views/ y public/ están en la raíz del proyecto: funciona igual desde src/ (dev) y dist/ (build)
 const root = path.join(import.meta.dirname, "..");
 
 app.engine(".hbs", hbsEngine);

@@ -14,12 +14,10 @@ jobs:
   sonarqube:
     name: Análisis y Quality Gate
     runs-on: ubuntu-latest
-    # Los PR desde forks no tienen acceso al secreto SONAR_TOKEN
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
         with:
-          # Historial completo para que Sonar calcule el "new code" y los autores
           fetch-depth: 0
 
       - uses: actions/setup-node@v4

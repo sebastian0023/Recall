@@ -37,8 +37,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # En los PR solo se construye para verificar que el Dockerfile funciona;
-      # en push a main/develop se publica en GHCR (CD)
       - name: Build (y push)
         uses: docker/build-push-action@v6
         with:

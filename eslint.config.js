@@ -9,7 +9,6 @@ export default tseslint.config(
       "node_modules/**",
       "coverage/**",
       "src/generated/**",
-      // Excluidos también en tsconfig.json (siguientes entregas)
       "src/lib/aws.ts",
       "src/lib/prompt.ts",
       "src/lib/transcribe.ts",

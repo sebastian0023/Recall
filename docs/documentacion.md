@@ -1,10 +1,3 @@
-<!--
-  Fuente editable del documento del proyecto.
-  Para generar el PDF en VS Code: extensión "Markdown PDF" (yzane.markdown-pdf),
-  clic derecho en este archivo → "Markdown PDF: Export (pdf)", y copiar el resultado
-  a la raíz del repositorio como documentacion.pdf.
--->
-
 <style>
   body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; }
   h1, h2, h3 { color: #0F4761; font-weight: normal; }

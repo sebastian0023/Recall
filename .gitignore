@@ -151,6 +151,5 @@ vite.config.ts.timestamp-*
 # Prisma client generado
 src/generated
 
-# Reporte de ESLint para SonarQube
 eslint-report.json
 .scannerwork

@@ -3,8 +3,6 @@ import { ApiError } from "../lib/apiError.js";
 import { prisma } from "../lib/prisma.js";
 import type { RecordingStatus } from "../models/recording.model.js";
 
-// Vistas con Handlebars: muestran lo que hay en la base de datos (las plantillas viven en /views)
-
 const STATUSES: RecordingStatus[] = ["UPLOADED", "PROCESSING", "DONE", "FAILED"];
 
 export async function home(_req: Request, res: Response) {
@@ -24,7 +22,6 @@ export async function home(_req: Request, res: Response) {
 }
 
 export async function recordingList(_req: Request, res: Response) {
-    // ?status= ya validado por el middleware validate (listRecordingsQuery)
     const { status, userId } = res.locals.query as { status?: RecordingStatus; userId?: string };
     const recordings = await prisma.recording.findMany({
         where: { status, userId },
@@ -67,7 +64,6 @@ export function viewNotFound(_req: Request, _res: Response, next: NextFunction) 
     next(new ApiError(404, "La página no existe"));
 }
 
-// Los errores de las vistas se muestran como página HTML, no como JSON
 export function viewErrorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
     const status = err instanceof ApiError ? err.status : 500;
     if (status === 500) console.error(err);
