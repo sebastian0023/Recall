@@ -1,0 +1,8 @@
+<h1>Error {{status}}</h1>
+<p>{{message}}</p>
+{{#if details.length}}
+  <ul>
+    {{#each details}}<li><code>{{field}}</code>: {{message}}</li>{{/each}}
+  </ul>
+{{/if}}
+<p><a href="/">Volver al inicio</a></p>

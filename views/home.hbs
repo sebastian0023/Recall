@@ -1,0 +1,24 @@
+<h1>Recall</h1>
+<p class="muted">Grabaciones de reuniones, clases y entrevistas con su transcripción y resúmenes. Los datos vienen de PostgreSQL.</p>
+
+<section class="stats">
+  <a class="stat" href="/users"><strong>{{counts.users}}</strong><span>Usuarios</span></a>
+  <a class="stat" href="/recordings"><strong>{{counts.recordings}}</strong><span>Grabaciones</span></a>
+  <div class="stat"><strong>{{counts.transcriptions}}</strong><span>Transcripciones</span></div>
+  <div class="stat"><strong>{{counts.summaries}}</strong><span>Resúmenes</span></div>
+</section>
+
+<h2>Últimas grabaciones</h2>
+{{#if latest.length}}
+  <ul class="list">
+    {{#each latest}}
+      <li>
+        <a href="/recordings/{{id}}">{{title}}</a>
+        {{> status status=status}}
+        <span class="muted">· {{user.name}} · {{date createdAt}}</span>
+      </li>
+    {{/each}}
+  </ul>
+{{else}}
+  <p class="empty">Todavía no hay grabaciones. Corre <code>npm run seed</code> para cargar datos de prueba.</p>
+{{/if}}

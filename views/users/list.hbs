@@ -1,0 +1,27 @@
+<h1>Usuarios</h1>
+
+{{#if users.length}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Nombre</th><th>Correo</th><th>Grabaciones</th><th>Alta</th></tr>
+      </thead>
+      <tbody>
+        {{#each users}}
+          <tr>
+            <td>{{name}}</td>
+            <td>{{email}}</td>
+            <td>
+              {{#if _count.recordings}}
+                <a href="/recordings?userId={{id}}">{{_count.recordings}}</a>
+              {{else}}0{{/if}}
+            </td>
+            <td>{{date createdAt}}</td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+{{else}}
+  <p class="empty">No hay usuarios.</p>
+{{/if}}
