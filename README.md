@@ -217,6 +217,7 @@ Prefijo `/api/v1` (excepto `/health`).
 | --- | --- | --- |
 | Health | `GET /health` | 200 `{ status: "ok" }` |
 | Auth | `POST /auth/register` | 201 usuario creado; 409 si el correo ya existe |
+| Auth | `POST /auth/confirm` | 200 correo confirmado (con `AUTH_MODE=dummy` no verifica el código); 400 si el código no es de 6 dígitos |
 | Auth | `POST /auth/login` | 200 `{ accessToken, user }` |
 | Auth | `GET /auth/me` | 200 usuario autenticado (401 sin sesión) |
 | Users | `GET /users` | 200 lista |
