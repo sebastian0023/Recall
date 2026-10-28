@@ -1,0 +1,45 @@
+<h1>Grabaciones</h1>
+
+<form class="filters" method="get" action="/recordings">
+  <label for="status">Estado</label>
+  <select id="status" name="status" onchange="this.form.submit()">
+    <option value="">Todos</option>
+    {{#each statuses}}
+      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{statusLabel value}}</option>
+    {{/each}}
+  </select>
+  <noscript><button type="submit">Filtrar</button></noscript>
+</form>
+
+{{#if recordings.length}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Título</th>
+          <th>Usuario</th>
+          <th>Estado</th>
+          <th>Duración</th>
+          <th>Transcripción</th>
+          <th>Resúmenes</th>
+          <th>Creada</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each recordings}}
+          <tr>
+            <td><a href="/recordings/{{id}}">{{title}}</a></td>
+            <td>{{user.name}}</td>
+            <td>{{> status status=status}}</td>
+            <td>{{duration durationSec}}</td>
+            <td>{{#if transcription}}Sí{{else}}—{{/if}}</td>
+            <td>{{_count.summaries}}</td>
+            <td>{{date createdAt}}</td>
+          </tr>
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+{{else}}
+  <p class="empty">No hay grabaciones{{#if status}} con estado «{{statusLabel status}}»{{/if}}.</p>
+{{/if}}

@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  DATABASE_URL: postgresql://recall:recall@localhost:5432/recall
+  AUTH_MODE: dummy
+
+jobs:
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  build:
+    name: Typecheck y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  database:
+    name: Migraciones, seed y colección de Postman
+    runs-on: ubuntu-latest
+    needs: build
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: recall
+          POSTGRES_PASSWORD: recall
+          POSTGRES_DB: recall
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U recall"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npm run db:deploy
+
+      - name: Run seed
+        run: npm run seed
+
+      - name: Seed again (debe ser repetible)
+        run: npm run seed
+
+      - name: Build y arranque del API
+        run: |
+          npm run build
+          node dist/index.js > server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000/health && exit 0; sleep 1; done
+          cat server.log
+          exit 1
+
+      - name: Colección de Postman (newman)
+        run: npx --yes newman@6 run docs/api.postman_collection.json --env-var baseUrl=http://localhost:3000
+
+      - name: Vistas responden con datos
+        run: |
+          curl -sf http://localhost:3000/recordings | grep -q "Clase de Bases de Datos"
+          curl -sf http://localhost:3000/recordings/22222222-2222-4222-8222-000000000001 | grep -q "Transcripción"
+
+      - name: Logs del servidor
+        if: always()
+        run: cat server.log || true

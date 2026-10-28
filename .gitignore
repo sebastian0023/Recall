@@ -150,3 +150,6 @@ vite.config.ts.timestamp-*
 
 # Prisma client generado
 src/generated
+
+eslint-report.json
+.scannerwork
