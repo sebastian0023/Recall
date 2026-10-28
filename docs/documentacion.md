@@ -266,7 +266,7 @@ Los listados aceptan filtros validados: `?status=&userId=` en recordings, `?reco
 
 ### Colección de peticiones
 
-`docs/api.postman_collection.json`: 64 peticiones organizadas por módulo, con al menos una por endpoint y los casos de error (cuerpo inválido, id inexistente, id mal formado, duplicado, JSON mal formado y ruta inexistente). La URL base está en la variable `{{baseUrl}}` y cada petición trae pruebas del status esperado, así que la colección completa se puede correr con newman.
+`docs/api.postman_collection.json`: 66 peticiones organizadas por módulo, con al menos una por endpoint y los casos de error (cuerpo inválido, id inexistente, id mal formado, duplicado, JSON mal formado y ruta inexistente). La URL base está en la variable `{{baseUrl}}` y cada petición trae pruebas del status esperado, así que la colección completa se puede correr con newman.
 
 ### Vistas
 
