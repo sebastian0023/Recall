@@ -14,6 +14,10 @@ const AUTH_MODE = process.env.AUTH_MODE === "dummy" ? "dummy" : "cognito";
 const cognito = (name: string): string =>
   AUTH_MODE === "cognito" ? required(name) : (process.env[name] ?? "");
 
+if (AUTH_MODE === "dummy" && process.env.NODE_ENV === "production") {
+  throw new Error("AUTH_MODE=dummy is not allowed when NODE_ENV=production");
+}
+
 export const env = {
   PORT: Number(process.env.PORT) || 3000,
   NODE_ENV: process.env.NODE_ENV ?? "development",

@@ -10,7 +10,7 @@ const s3Key = z.string().trim().min(1, "Must not be empty").max(500, "Must be at
 const durationSec = z.number({ error: "Must be a number" }).int("Must be an integer").min(0, "Must be 0 or more");
 
 export const createRecordingBody = z.strictObject({
-    userId: uuid,
+    userId: uuid.optional(),
     title,
     s3Key,
     durationSec: durationSec.nullish(),

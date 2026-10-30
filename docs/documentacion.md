@@ -266,7 +266,7 @@ Los listados aceptan filtros validados: `?status=&userId=` en recordings, `?reco
 
 ### Colección de peticiones
 
-`docs/api.postman_collection.json`: 66 peticiones organizadas por módulo, con al menos una por endpoint y los casos de error (cuerpo inválido, id inexistente, id mal formado, duplicado, JSON mal formado y ruta inexistente). La URL base está en la variable `{{baseUrl}}` y cada petición trae pruebas del status esperado, así que la colección completa se puede correr con newman.
+`docs/api.postman_collection.json`: 86 peticiones organizadas por módulo, con al menos una por endpoint y los casos de error (cuerpo inválido, id inexistente, id mal formado, duplicado, JSON mal formado, ruta inexistente, 401 y 403). La URL base está en la variable `{{baseUrl}}` y cada petición trae pruebas del status esperado, así que la colección completa se puede correr con newman.
 
 ### Vistas
 
@@ -287,7 +287,7 @@ Cómo cubre Recall cada requisito del curso y en qué entrega se implementa.
 | Validaciones | Middleware `validate` con zod para body, params y query; errores por campo con status 400. | Hecho (esta entrega) |
 | MVC | Modelos (Prisma + tipos), vistas (Handlebars) y controladores, conectados por rutas por módulo. | Hecho (esta entrega) |
 | Vistas | Handlebars: layout base con navegación, listado y detalle de grabaciones con datos reales. | Base hecha; se amplían en las siguientes entregas |
-| Autenticación y permisos | Amazon Cognito para registro y login; el middleware `auth` verifica el access token. Permisos por rol (ver Roles y permisos). | Autenticación integrada; permisos en la Entrega 2 |
+| Autenticación y permisos | Amazon Cognito para registro y login; el middleware `auth` verifica el access token. Permisos por rol (ver Roles y permisos). | Hecho (autenticación y permisos por rol) |
 | Login con proveedor | Google como proveedor federado en Cognito (OAuth 2.0 con el Hosted UI). El usuario se crea o se liga por `cognitoSub`. | Entrega 2 |
 | Correos | Cognito envía el código de verificación al registrarse. Con Amazon SES se avisará al usuario cuando su resumen esté listo. | Verificación hecha; aviso por correo pendiente |
 | Archivos | Subida del audio con multer a un bucket privado de S3; la BD guarda solo `s3Key`. | Entrega 3 (archivos) |
@@ -296,7 +296,7 @@ Cómo cubre Recall cada requisito del curso y en qué entrega se implementa.
 
 ## Roles y permisos
 
-Se implementan en la siguiente entrega. El rol se guardará en un campo `role` (enum USER | ADMIN) del modelo User y se revisará en un middleware de autorización después de `auth`.
+El rol se guarda en el campo `role` (enum USER | ADMIN, por defecto USER) del modelo User. Después de `auth`, el middleware `authorize` y `src/lib/permissions.ts` revisan el rol y el dueño del recurso. Las vistas usan una sesión en cookie `httpOnly` con las mismas reglas. El rol solo lo cambia un administrador con `PATCH /users/:id`.
 
 | Rol | Descripción |
 | --- | --- |
@@ -356,6 +356,6 @@ Los workflows de GitHub Actions corren en cada push y en cada Pull Request:
 
 | Entrega | Pendientes |
 | --- | --- |
-| Entrega 2: autenticación | Roles y permisos (campo `role` y middleware de autorización), login con Google en Cognito y documentación del API con Swagger. |
+| Entrega 2: autenticación | Login con Google en Cognito y documentación del API con Swagger. |
 | Entrega 3: archivos | Subida de audios con multer a S3. |
 | Entregas siguientes | Transcripción con Amazon Transcribe, resúmenes con Amazon Bedrock, aviso por correo con SES, websockets con Socket.IO, paginación y filtros. |

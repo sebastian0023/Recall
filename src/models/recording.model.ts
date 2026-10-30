@@ -29,7 +29,7 @@ export interface Recording {
 }
 
 export interface CreateRecordInput {
-    userId: string;
+    userId?: string;
     title: string;
     s3Key: string;
     durationSec?: number | null;

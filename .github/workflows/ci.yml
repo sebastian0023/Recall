@@ -110,8 +110,10 @@ jobs:
 
       - name: Vistas responden con datos
         run: |
-          curl -sf http://localhost:3000/recordings | grep -q "Clase de Bases de Datos"
-          curl -sf http://localhost:3000/recordings/22222222-2222-4222-8222-000000000001 | grep -q "Transcripción"
+          curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/recordings | grep -q 302
+          curl -s -c session.txt -o /dev/null -d "email=sebastian@recall.app&password=dummy" http://localhost:3000/login
+          curl -sf -b session.txt http://localhost:3000/recordings | grep -q "Clase de Bases de Datos"
+          curl -sf -b session.txt http://localhost:3000/recordings/22222222-2222-4222-8222-000000000001 | grep -q "Transcripción"
 
       - name: Logs del servidor
         if: always()

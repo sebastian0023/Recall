@@ -7,6 +7,11 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 enum RecordingStatus {
   UPLOADED
   PROCESSING
@@ -25,6 +30,7 @@ model User {
   cognitoSub String   @unique
   email      String   @unique
   name       String
+  role       UserRole @default(USER)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

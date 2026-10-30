@@ -13,6 +13,11 @@ const TEMPLATE_LABELS: Record<string, string> = {
     INTERVIEW: "Entrevista",
 };
 
+const ROLE_LABELS: Record<string, string> = {
+    USER: "Usuario",
+    ADMIN: "Administrador",
+};
+
 const dateFormat = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
 export const hbsEngine = engine({
@@ -22,6 +27,7 @@ export const hbsEngine = engine({
         eq: (a: unknown, b: unknown) => a === b,
         statusLabel: (status: string) => STATUS_LABELS[status] ?? status,
         templateLabel: (template: string) => TEMPLATE_LABELS[template] ?? template,
+        roleLabel: (role: string) => ROLE_LABELS[role] ?? role,
         lower: (value: string) => String(value).toLowerCase(),
         date: (value: Date | string) => dateFormat.format(new Date(value)),
         duration: (sec: number | null | undefined) => {

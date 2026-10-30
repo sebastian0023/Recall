@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { ApiError } from "../lib/apiError.js";
+import { currentUser, isAdmin } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { toPublicUser, type UpdateUserInput } from "../models/user.model.js";
 
@@ -29,12 +30,13 @@ export async function getUserById(req: Request, res: Response) {
 }
 
 export async function updateUser(req: Request, res: Response) {
-    const { name, email } = req.body as UpdateUserInput;
+    const { name, email, role } = req.body as UpdateUserInput;
+    if (role && !isAdmin(currentUser(res))) throw new ApiError(403, "Forbidden");
 
     // Email repetido -> P2002 -> 409; usuario inexistente -> P2025 -> 404 (errorHandler)
     const user = await prisma.user.update({
         where: { id: req.params.id as string },
-        data: { name, email },
+        data: { name, email, role },
     });
 
     res.status(200).json({

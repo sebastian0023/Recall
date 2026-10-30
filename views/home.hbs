@@ -2,7 +2,7 @@
 <p class="muted">Grabaciones de reuniones, clases y entrevistas con su transcripción y resúmenes. Los datos vienen de PostgreSQL.</p>
 
 <section class="stats">
-  <a class="stat" href="/users"><strong>{{counts.users}}</strong><span>Usuarios</span></a>
+  {{#if (eq user.role "ADMIN")}}<a class="stat" href="/users"><strong>{{counts.users}}</strong><span>Usuarios</span></a>{{/if}}
   <a class="stat" href="/recordings"><strong>{{counts.recordings}}</strong><span>Grabaciones</span></a>
   <div class="stat"><strong>{{counts.transcriptions}}</strong><span>Transcripciones</span></div>
   <div class="stat"><strong>{{counts.summaries}}</strong><span>Resúmenes</span></div>

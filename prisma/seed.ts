@@ -8,7 +8,7 @@ const TRANS = (n: number) => id("3", n);
 const SUM = (n: number) => id("4", n);
 
 const users: Prisma.UserCreateManyInput[] = [
-    { id: USER(1), cognitoSub: "seed-sebastian", email: "sebastian@recall.app", name: "Sebastián Macías" },
+    { id: USER(1), cognitoSub: "seed-sebastian", email: "sebastian@recall.app", name: "Sebastián Macías", role: "ADMIN" },
     { id: USER(2), cognitoSub: "seed-emilio", email: "emilio@recall.app", name: "Emilio Guzmán" },
     { id: USER(3), cognitoSub: "seed-ana", email: "ana.lopez@recall.app", name: "Ana López" },
     { id: USER(4), cognitoSub: "seed-carlos", email: "carlos.ramirez@recall.app", name: "Carlos Ramírez" },

@@ -3,17 +3,21 @@
 //   cognitoSub String   @unique
 //   email      String   @unique
 //   name       String
+//   role       UserRole @default(USER)
 //   createdAt  DateTime @default(now())
 //   updatedAt  DateTime @updatedAt
 
 //   recordings Recording[]
 // }
 
+export type UserRole = "USER" | "ADMIN";
+
 export interface User {
     id: string;
     cognitoSub: string;
     email: string;
     name: string;
+    role: UserRole;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -34,6 +38,7 @@ export interface LoginInput {
 export interface UpdateUserInput {
     name?: string;
     email?: string;
+    role?: UserRole;
 }
 
 export interface ConfirmInput {

@@ -58,3 +58,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
 .card h3 { margin: 0 0 8px; }
 .summary { white-space: pre-wrap; font-family: inherit; margin: 0; }
+
+.inline { display: inline; }
+.login { max-width: 360px; margin: 32px auto; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.login h1 { margin-top: 0; font-size: 1.4rem; }
+.login form { display: flex; flex-direction: column; gap: 8px; }
+.login input { padding: 8px; border: 1px solid var(--border); border-radius: 4px; font: inherit; }
+.login button { margin-top: 8px; padding: 8px; cursor: pointer; }

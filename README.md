@@ -61,7 +61,7 @@ Verificación:
 
 ```bash
 curl localhost:3000/health
-curl localhost:3000/api/v1/recordings
+curl localhost:3000/api/v1/recordings -H "Authorization: Bearer dummy-11111111-1111-4111-8111-000000000001"
 ```
 
 ### Variables de entorno
@@ -73,11 +73,11 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `PORT` | Puerto del API (3000) |
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (obligatoria) |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
-| `AUTH_MODE` | `dummy` (por defecto en `.env.example`): no se exige token, y `register`/`login` solo usan la BD. `cognito`: autenticación real con Amazon Cognito |
+| `AUTH_MODE` | `dummy` (por defecto en `.env.example`): `register`/`login` solo usan la BD y el token es `dummy-<userId>`; no se permite con `NODE_ENV=production`. `cognito`: autenticación real con Amazon Cognito |
 | `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET` | Solo con `AUTH_MODE=cognito` |
 | `AWS_*`, `S3_BUCKET`, `BEDROCK_MODEL_ID` | Reservadas para entregas siguientes |
 
-> La autenticación real y los permisos se evalúan en la siguiente entrega. Con `AUTH_MODE=dummy` todas las rutas se pueden probar sin token.
+> Todas las rutas del API, excepto `/health`, `register`, `confirm` y `login`, exigen `Authorization: Bearer <token>`, también con `AUTH_MODE=dummy`. Ver [Roles y permisos](#roles-y-permisos).
 
 ## Scripts
 
@@ -106,11 +106,49 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 
 Los ids son fijos y fáciles de reconocer (`11111111-…-000000000001` = user 1, `22222222-…` = recordings, `33333333-…` = transcriptions, `44444444-…` = summaries), así la colección de Postman funciona justo después del seed.
 
+## Roles y permisos
+
+Cada usuario tiene un `role` (enum `USER` | `ADMIN`, por defecto `USER`). El middleware `auth` identifica al usuario a partir del token y [src/middlewares/authorize.ts](src/middlewares/authorize.ts) y [src/lib/permissions.ts](src/lib/permissions.ts) revisan lo que puede hacer. Sin token o con un token inválido responde 401; sin permiso, 403. En grabaciones, transcripciones y resúmenes, un id inexistente responde 404 antes de revisar al dueño.
+
+| Acción | Invitado | Usuario | Admin |
+| --- | --- | --- | --- |
+| Registrarse, confirmar correo, iniciar sesión | Sí | Sí | Sí |
+| Ver su perfil (`GET /auth/me`) | No | Sí | Sí |
+| Listar usuarios | No | No | Sí |
+| Ver o editar usuario | No | Propio | Todos |
+| Cambiar el rol de un usuario | No | No | Sí |
+| Eliminar usuario | No | No | Sí |
+| Listar grabaciones | No | Propias | Todas |
+| Crear grabación | No | A su nombre | Para cualquier usuario |
+| Ver, editar, procesar o eliminar grabación | No | Propias | Todas |
+| Listar, ver, crear, editar o eliminar transcripciones y resúmenes | No | De sus grabaciones | Todos |
+| Vistas web | No | Sus datos | Todos los datos |
+
+En `POST /recordings`, `userId` es opcional: si no se envía, la grabación queda a nombre de quien la crea. Un usuario que envía el `userId` de otro recibe 403.
+
+El rol se cambia con `PATCH /users/:id` y `{ "role": "ADMIN" }`, solo como administrador. Con `AUTH_MODE=cognito` el primer administrador se asigna directamente en la base de datos.
+
+**Cómo probarlo con `AUTH_MODE=dummy`** (la contraseña no se verifica):
+
+| Usuario del seed | Rol | Token |
+| --- | --- | --- |
+| `sebastian@recall.app` | `ADMIN` | `dummy-11111111-1111-4111-8111-000000000001` |
+| `ana.lopez@recall.app` | `USER` | `dummy-11111111-1111-4111-8111-000000000003` |
+
+```bash
+curl localhost:3000/api/v1/recordings -H "Authorization: Bearer dummy-11111111-1111-4111-8111-000000000003"
+```
+
+En las vistas, entra en <http://localhost:3000/login> con cualquiera de esos correos. La sesión se guarda en una cookie `httpOnly`.
+
+El detalle de esta entrega y sus evidencias están en [documentacion-entrega-2.pdf](documentacion-entrega-2.pdf) (fuente: [docs/documentacion-entrega-2.md](docs/documentacion-entrega-2.md)).
+
 ## Colección de peticiones
 
 [docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
 
-- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries y Errores generales.
+- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales.
+- Las peticiones usan el token de `{{adminToken}}`; la carpeta Permisos prueba 401 y 403 con `{{userToken}}`. Con `AUTH_MODE=cognito`, reemplaza esas variables por el `accessToken` de `POST /auth/login`.
 - Al menos una petición por endpoint, más los casos de error: cuerpo inválido, id inexistente, id mal formado, duplicado (409), JSON mal formado y ruta inexistente.
 - La URL base es la variable de colección `{{baseUrl}}` (por defecto `http://localhost:3000`). Si cambias el puerto, cambia solo esa variable.
 - Las variables `userId`, `recordingId`, `transcriptionId` y `summaryId` apuntan a registros del seed; `newUserId`, `newRecordingId`, etc. se llenan solas al crear recursos.
@@ -129,7 +167,8 @@ Hechas con Handlebars ([express-handlebars](https://github.com/express-handlebar
 | `GET /` | Inicio: conteo de cada tabla y últimas grabaciones |
 | `GET /recordings` | Listado de grabaciones con su usuario, estado, duración y número de resúmenes; filtro por estado (`?status=DONE`) |
 | `GET /recordings/:id` | Detalle: datos de la grabación, usuario, transcripción por hablante y resúmenes |
-| `GET /users` | Listado de usuarios con su número de grabaciones |
+| `GET /users` | Listado de usuarios con su número de grabaciones (solo administradores) |
+| `GET /login` · `POST /login` · `POST /logout` | Inicio y cierre de sesión de las vistas |
 
 Todas usan el layout [views/layouts/main.hbs](views/layouts/main.hbs) con la barra de navegación. Los parámetros se validan con el mismo middleware `validate` del API: un id mal formado muestra una página de error 400, y uno inexistente, una página 404.
 

@@ -9,12 +9,15 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/">Recall</a>
-    <nav>
-      <a href="/">Inicio</a>
-      <a href="/recordings">Grabaciones</a>
-      <a href="/users">Usuarios</a>
-      <a href="/health">Health</a>
-    </nav>
+    {{#if user}}
+      <nav>
+        <a href="/">Inicio</a>
+        <a href="/recordings">Grabaciones</a>
+        {{#if (eq user.role "ADMIN")}}<a href="/users">Usuarios</a>{{/if}}
+        <span class="muted">{{user.name}} ({{roleLabel user.role}})</span>
+        <form class="inline" method="post" action="/logout"><button type="submit">Salir</button></form>
+      </nav>
+    {{/if}}
   </header>
 
   <main class="container">

@@ -92,19 +92,13 @@ export async function confirm(req: Request, res: Response) {
     res.status(200).json({ message: "Email confirmed" });
 }
 
-export async function login(req: Request, res: Response) {
-    const { email, password } = req.body as LoginInput;
-
-    // Modo dummy: no hay contraseña que verificar, solo se busca al usuario y se devuelve un token de relleno
+export async function authenticate(email: string, password: string) {
+    // Modo dummy: no hay contraseña que verificar, solo se busca al usuario
     if (env.AUTH_MODE === "dummy") {
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) throw new ApiError(401, "Incorrect email or password");
 
-        res.status(200).json({
-            data: { accessToken: "dummy-token", expiresIn: 3600, user: toPublicUser(user) },
-            message: "Login successful",
-        });
-        return;
+        return { accessToken: `dummy-${user.id}`, expiresIn: 3600, user: toPublicUser(user) };
     }
 
     let tokens;
@@ -129,16 +123,20 @@ export async function login(req: Request, res: Response) {
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    res.status(200).json({
-        data: {
-            accessToken: tokens.AccessToken,
-            idToken: tokens.IdToken,
-            refreshToken: tokens.RefreshToken,
-            expiresIn: tokens.ExpiresIn,
-            user: user ? toPublicUser(user) : null,
-        },
-        message: "Login successful",
-    });
+    return {
+        accessToken: tokens.AccessToken,
+        idToken: tokens.IdToken,
+        refreshToken: tokens.RefreshToken,
+        expiresIn: tokens.ExpiresIn,
+        user: user ? toPublicUser(user) : null,
+    };
+}
+
+export async function login(req: Request, res: Response) {
+    const { email, password } = req.body as LoginInput;
+    const session = await authenticate(email, password);
+
+    res.status(200).json({ data: session, message: "Login successful" });
 }
 
 export async function me(_req: Request, res: Response) {
