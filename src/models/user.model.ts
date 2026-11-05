@@ -1,20 +1,8 @@
-// model User {
-//   id         String   @id @default(uuid()) @db.Uuid
-//   cognitoSub String   @unique
-//   email      String   @unique
-//   name       String
-//   role       UserRole @default(USER)
-//   createdAt  DateTime @default(now())
-//   updatedAt  DateTime @updatedAt
-
-//   recordings Recording[]
-// }
-
 export type UserRole = "USER" | "ADMIN";
 
 export interface User {
     id: string;
-    cognitoSub: string;
+    passwordHash?: string | null;
     email: string;
     name: string;
     role: UserRole;
@@ -22,7 +10,7 @@ export interface User {
     updatedAt: Date;
 }
 
-export type PublicUser = Omit<User, "cognitoSub">;
+export type PublicUser = Omit<User, "passwordHash">;
 
 export interface RegisterInput {
     email: string;
@@ -41,13 +29,9 @@ export interface UpdateUserInput {
     role?: UserRole;
 }
 
-export interface ConfirmInput {
-    email: string;
-    code: string;
-}
-
-export function toPublicUser(user: User): PublicUser {
-    const { cognitoSub, ...publicUser } = user;
+// Segunda capa de protección: nunca se expone passwordHash, aunque el objeto lo trajera
+export function toPublicUser<T extends object>(user: T): Omit<T, "passwordHash"> {
+    const { passwordHash: _passwordHash, ...publicUser } = user as T & { passwordHash?: unknown };
     return publicUser;
 }
 

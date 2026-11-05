@@ -27,13 +27,11 @@ export async function login(req: Request, res: Response) {
 
     try {
         const session = await authenticate(input.data.email, input.data.password);
-        if (!session.accessToken) throw new ApiError(401, "Incorrect email or password");
-
         res.cookie(SESSION_COOKIE, session.accessToken, {
             httpOnly: true,
             sameSite: "lax",
             secure: env.NODE_ENV === "production",
-            maxAge: (session.expiresIn ?? 3600) * 1000,
+            maxAge: session.expiresIn * 1000,
         });
         res.redirect("/");
     } catch (err) {
@@ -47,8 +45,8 @@ export function logout(_req: Request, res: Response) {
     res.redirect("/login");
 }
 
-export async function home(_req: Request, res: Response) {
-    const user = currentUser(res);
+export async function home(req: Request, res: Response) {
+    const user = currentUser(req);
     const own = !isAdmin(user);
     const recordingScope = own ? { userId: user.id } : undefined;
     const childScope = own ? { recording: { userId: user.id } } : undefined;
@@ -73,9 +71,9 @@ export async function home(_req: Request, res: Response) {
     });
 }
 
-export async function recordingList(_req: Request, res: Response) {
+export async function recordingList(req: Request, res: Response) {
     const { status, userId } = res.locals.query as { status?: RecordingStatus; userId?: string };
-    const user = currentUser(res);
+    const user = currentUser(req);
     if (userId) assertCanAccess(user, userId);
 
     const recordings = await prisma.recording.findMany({
@@ -102,7 +100,7 @@ export async function recordingDetail(req: Request, res: Response) {
         },
     });
     if (!recording) throw new ApiError(404, "La grabación no existe");
-    assertCanAccess(currentUser(res), recording.userId);
+    assertCanAccess(currentUser(req), recording.userId);
 
     res.render("recordings/detail", { title: recording.title, recording });
 }

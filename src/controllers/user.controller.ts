@@ -31,7 +31,7 @@ export async function getUserById(req: Request, res: Response) {
 
 export async function updateUser(req: Request, res: Response) {
     const { name, email, role } = req.body as UpdateUserInput;
-    if (role && !isAdmin(currentUser(res))) throw new ApiError(403, "Forbidden");
+    if (role && !isAdmin(currentUser(req))) throw new ApiError(403, "Forbidden");
 
     // Email repetido -> P2002 -> 409; usuario inexistente -> P2025 -> 404 (errorHandler)
     const user = await prisma.user.update({

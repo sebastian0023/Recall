@@ -11,8 +11,3 @@ export const loginBody = z.strictObject({
     email,
     password: z.string().min(1, "Is required"),
 });
-
-export const confirmBody = z.strictObject({
-    email,
-    code: z.string().regex(/^\d{6}$/, "Must be a 6-digit code"),
-});

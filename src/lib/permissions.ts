@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Request } from "express";
 import type { UserRole } from "../models/user.model.js";
 import { ApiError } from "./apiError.js";
 
@@ -9,10 +9,10 @@ export interface AuthUser {
     role: UserRole;
 }
 
-export function currentUser(res: Response): AuthUser {
-    const user = res.locals.user as AuthUser | undefined;
-    if (!user) throw new ApiError(401, "Unauthorized");
-    return user;
+// requireAuth deja al usuario en req.user; sin él no hay sesión
+export function currentUser(req: Request): AuthUser {
+    if (!req.user) throw new ApiError(401, "Unauthorized");
+    return req.user;
 }
 
 export function isAdmin(user: AuthUser): boolean {

@@ -9,14 +9,14 @@ import {
     processRecording,
     updateRecording,
 } from "../controllers/recording.controller.js";
-import { auth } from "../middlewares/auth.js";
+import { requireAuth } from "../middlewares/auth.js";
 import { validate } from "../middlewares/validate.js";
 import { idParams } from "../schemas/common.schema.js";
 import { createRecordingBody, listRecordingsQuery, updateRecordingBody } from "../schemas/recording.schema.js";
 
 const router = Router();
 
-router.use(auth);
+router.use(requireAuth);
 
 router.get("/", validate({ query: listRecordingsQuery }), getRecordings);
 router.get("/:id", validate({ params: idParams }), getRecordingById);

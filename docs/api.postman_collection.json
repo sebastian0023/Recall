@@ -53,6 +53,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));",
+                  "pm.test(\"Se crea con rol USER\", () => pm.expect(pm.response.json().data.role).to.eql(\"USER\"));",
                   "if (pm.response.code === 201) pm.collectionVariables.set(\"newUserId\", pm.response.json().data.id);"
                 ]
               }
@@ -190,7 +192,7 @@
           }
         },
         {
-          "name": "Confirmar correo",
+          "name": "Login (admin, guarda adminToken)",
           "event": [
             {
               "listen": "test",
@@ -198,104 +200,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Mensaje de confirmación\", () => pm.expect(pm.response.json().message).to.eql(\"Email confirmed\"));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/confirm",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "confirm"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"sebastian@recall.app\",\n  \"code\": \"123456\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "description": "Con AUTH_MODE=dummy responde 200 sin verificar el código. Con AUTH_MODE=cognito usa el código de 6 dígitos que Cognito manda por correo al registrarse.",
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Confirmar - código inválido (400)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
-                  "pm.test(\"Error en formato { error: { message } }\", () => pm.expect(pm.response.json().error.message).to.be.a(\"string\"));",
-                  "pm.test(\"Indica que falló el campo code\", () => pm.expect(pm.response.json().error.details.map((d) => d.field)).to.include(\"code\"));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/confirm",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "auth",
-                "confirm"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"sebastian@recall.app\",\n  \"code\": \"12\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          }
-        },
-        {
-          "name": "Login",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                  "const body = pm.response.json();",
+                  "pm.test(\"Devuelve un token JWT con expiración\", () => { pm.expect(body.data.accessToken).to.be.a(\"string\"); pm.expect(body.data.expiresIn).to.be.a(\"number\"); });",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));",
+                  "pm.collectionVariables.set(\"adminToken\", body.data.accessToken);"
                 ]
               }
             }
@@ -322,7 +230,104 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"sebastian@recall.app\",\n  \"password\": \"cualquiera\"\n}",
+              "raw": "{\n  \"email\": \"sebastian@recall.app\",\n  \"password\": \"Recall2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login - usuario normal (guarda userToken)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Rol USER\", () => pm.expect(pm.response.json().data.user.role).to.eql(\"USER\"));",
+                  "pm.collectionVariables.set(\"userToken\", pm.response.json().data.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ana.lopez@recall.app\",\n  \"password\": \"Recall2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login - contraseña incorrecta (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"sebastian@recall.app\",\n  \"password\": \"incorrecta\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -343,7 +348,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"Error en formato { error: { message } }\", () => pm.expect(pm.response.json().error.message).to.be.a(\"string\"));"
+                  "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));"
                 ]
               }
             }
@@ -370,7 +375,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"nadie@recall.app\",\n  \"password\": \"cualquiera\"\n}",
+              "raw": "{\n  \"email\": \"nadie@recall.app\",\n  \"password\": \"Recall2026!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -3405,11 +3410,11 @@
     },
     {
       "key": "adminToken",
-      "value": "dummy-11111111-1111-4111-8111-000000000001"
+      "value": ""
     },
     {
       "key": "userToken",
-      "value": "dummy-11111111-1111-4111-8111-000000000003"
+      "value": ""
     },
     {
       "key": "regularUserId",

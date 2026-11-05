@@ -25,6 +25,7 @@ El documento del proyecto (versión 2) está en la raíz: [documentacion.pdf](do
 | Framework | Express 5 |
 | Base de datos | PostgreSQL 17 (Docker Compose) |
 | ORM | Prisma 7 |
+| Autenticación | bcryptjs (contraseñas) + jsonwebtoken (JWT HS256) |
 | Vistas | Handlebars (express-handlebars) |
 | Linter | ESLint + typescript-eslint |
 | Gestor de paquetes | npm |
@@ -46,7 +47,7 @@ npm run build && npm start
 ```
 
 1. `npm ci` instala las dependencias y genera el cliente de Prisma (`postinstall`).
-2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml` (incluye `AUTH_MODE=dummy`, necesario para probar sin Cognito).
+2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml` (incluye un `JWT_SECRET` de desarrollo; para un servidor real genera uno propio, ver [Variables de entorno](#variables-de-entorno)).
 3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`). Espera unos segundos a que acepte conexiones antes del siguiente paso.
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
 5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
@@ -61,7 +62,9 @@ Verificación:
 
 ```bash
 curl localhost:3000/health
-curl localhost:3000/api/v1/recordings -H "Authorization: Bearer dummy-11111111-1111-4111-8111-000000000001"
+curl -s localhost:3000/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ana.lopez@recall.app","password":"Recall2026!"}'   # devuelve data.accessToken
+curl localhost:3000/api/v1/recordings -H "Authorization: Bearer <accessToken>"
 ```
 
 ### Variables de entorno
@@ -73,11 +76,11 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `PORT` | Puerto del API (3000) |
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (obligatoria) |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
-| `AUTH_MODE` | `dummy` (por defecto en `.env.example`): `register`/`login` solo usan la BD y el token es `dummy-<userId>`; no se permite con `NODE_ENV=production`. `cognito`: autenticación real con Amazon Cognito |
-| `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET` | Solo con `AUTH_MODE=cognito` |
+| `JWT_SECRET` | Secreto con el que se firman los JWT (obligatorio, mínimo 32 caracteres). El valor de `.env.example` es solo de desarrollo y se rechaza con `NODE_ENV=production`. Para generar uno: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `JWT_EXPIRES_IN` | Duración de la sesión: segundos (`3600`) o un número con unidad (`30s`, `15m`, `1h`, `7d`). Por defecto `1h`. Para probar un token expirado, bájala (p. ej. `5s`) y reinicia el API |
 | `AWS_*`, `S3_BUCKET`, `BEDROCK_MODEL_ID` | Reservadas para entregas siguientes |
 
-> Todas las rutas del API, excepto `/health`, `register`, `confirm` y `login`, exigen `Authorization: Bearer <token>`, también con `AUTH_MODE=dummy`. Ver [Roles y permisos](#roles-y-permisos).
+> Todas las rutas del API, excepto `/health`, `register` y `login`, exigen `Authorization: Bearer <token>`. Ver [Roles y permisos](#roles-y-permisos).
 
 ## Scripts
 
@@ -108,11 +111,11 @@ Los ids son fijos y fáciles de reconocer (`11111111-…-000000000001` = user 1,
 
 ## Roles y permisos
 
-Cada usuario tiene un `role` (enum `USER` | `ADMIN`, por defecto `USER`). El middleware `auth` identifica al usuario a partir del token y [src/middlewares/authorize.ts](src/middlewares/authorize.ts) y [src/lib/permissions.ts](src/lib/permissions.ts) revisan lo que puede hacer. Sin token o con un token inválido responde 401; sin permiso, 403. En grabaciones, transcripciones y resúmenes, un id inexistente responde 404 antes de revisar al dueño.
+Cada usuario tiene un `role` (enum `USER` | `ADMIN`, por defecto `USER`). El middleware `requireAuth` verifica el JWT, lee al usuario de la BD (así el rol siempre está al día) y lo deja en `req.user`; [src/middlewares/authorize.ts](src/middlewares/authorize.ts) y [src/lib/permissions.ts](src/lib/permissions.ts) revisan lo que puede hacer. El token no guarda el rol. Sin token, con un token inválido, alterado o vencido responde 401; sin permiso, 403. En grabaciones, transcripciones y resúmenes, un id inexistente responde 404 antes de revisar al dueño.
 
 | Acción | Invitado | Usuario | Admin |
 | --- | --- | --- | --- |
-| Registrarse, confirmar correo, iniciar sesión | Sí | Sí | Sí |
+| Registrarse e iniciar sesión | Sí | Sí | Sí |
 | Ver su perfil (`GET /auth/me`) | No | Sí | Sí |
 | Listar usuarios | No | No | Sí |
 | Ver o editar usuario | No | Propio | Todos |
@@ -126,17 +129,21 @@ Cada usuario tiene un `role` (enum `USER` | `ADMIN`, por defecto `USER`). El mid
 
 En `POST /recordings`, `userId` es opcional: si no se envía, la grabación queda a nombre de quien la crea. Un usuario que envía el `userId` de otro recibe 403.
 
-El rol se cambia con `PATCH /users/:id` y `{ "role": "ADMIN" }`, solo como administrador. Con `AUTH_MODE=cognito` el primer administrador se asigna directamente en la base de datos.
+El rol se cambia con `PATCH /users/:id` y `{ "role": "ADMIN" }`, solo como administrador. El registro siempre crea usuarios `USER` (enviar `role` responde 400); el primer administrador viene del seed o se asigna directamente en la base de datos.
 
-**Cómo probarlo con `AUTH_MODE=dummy`** (la contraseña no se verifica):
+**Cómo probarlo.** `npm run seed` crea todos los usuarios con la contraseña `Recall2026!` (guardada con bcrypt en la BD):
 
-| Usuario del seed | Rol | Token |
+| Usuario del seed | Rol | Contraseña |
 | --- | --- | --- |
-| `sebastian@recall.app` | `ADMIN` | `dummy-11111111-1111-4111-8111-000000000001` |
-| `ana.lopez@recall.app` | `USER` | `dummy-11111111-1111-4111-8111-000000000003` |
+| `sebastian@recall.app` | `ADMIN` | `Recall2026!` |
+| `ana.lopez@recall.app` | `USER` | `Recall2026!` |
+
+Los demás usuarios del seed (`emilio@`, `carlos.ramirez@`, `mariana.torres@`, `diego.hernandez@`, todos `@recall.app`) son `USER` y usan la misma contraseña.
 
 ```bash
-curl localhost:3000/api/v1/recordings -H "Authorization: Bearer dummy-11111111-1111-4111-8111-000000000003"
+TOKEN=$(curl -s localhost:3000/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ana.lopez@recall.app","password":"Recall2026!"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).data.accessToken')
+curl localhost:3000/api/v1/recordings -H "Authorization: Bearer $TOKEN"
 ```
 
 En las vistas, entra en <http://localhost:3000/login> con cualquiera de esos correos. La sesión se guarda en una cookie `httpOnly`.
@@ -148,7 +155,7 @@ El detalle de esta entrega y sus evidencias están en [documentacion-entrega-2.p
 [docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
 
 - Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales.
-- Las peticiones usan el token de `{{adminToken}}`; la carpeta Permisos prueba 401 y 403 con `{{userToken}}`. Con `AUTH_MODE=cognito`, reemplaza esas variables por el `accessToken` de `POST /auth/login`.
+- Las peticiones usan el token de `{{adminToken}}`; la carpeta Permisos prueba 401 y 403 con `{{userToken}}`. Las dos variables se llenan solas: las peticiones de login de la carpeta Auth guardan el `accessToken` del admin (`adminToken`) y de Ana López (`userToken`), así que hay que correr la carpeta Auth antes que las demás (Run collection ya lo hace en orden).
 - Al menos una petición por endpoint, más los casos de error: cuerpo inválido, id inexistente, id mal formado, duplicado (409), JSON mal formado y ruta inexistente.
 - La URL base es la variable de colección `{{baseUrl}}` (por defecto `http://localhost:3000`). Si cambias el puerto, cambia solo esa variable.
 - Las variables `userId`, `recordingId`, `transcriptionId` y `summaryId` apuntan a registros del seed; `newUserId`, `newRecordingId`, etc. se llenan solas al crear recursos.
@@ -208,7 +215,7 @@ recall-api/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
-│   ├── lib/                  # prisma, cognito, ApiError
+│   ├── lib/                  # prisma, password (bcrypt), token (JWT), permissions, ApiError
 │   ├── middlewares/          # auth, validate, errorHandler, notFound
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
 │   ├── models/               # tipos TypeScript por entidad
@@ -229,7 +236,8 @@ recall-api/
 - `User` 1 — N `Recording`
 - `Recording` 1 — 1 `Transcription` (`recordingId` único)
 - `Recording` 1 — N `Summary`
-- Índices únicos: `User.email`, `User.cognitoSub`, `Transcription.recordingId`.
+- Índices únicos: `User.email`, `Transcription.recordingId`.
+- `User.passwordHash` guarda el hash bcrypt (nulo para usuarios que entren solo con un proveedor externo). Prisma lo omite de todas las consultas y nunca aparece en una respuesta.
 
 Relaciones visibles en las respuestas:
 
@@ -255,9 +263,8 @@ Prefijo `/api/v1` (excepto `/health`).
 | Módulo | Método y ruta | Respuesta |
 | --- | --- | --- |
 | Health | `GET /health` | 200 `{ status: "ok" }` |
-| Auth | `POST /auth/register` | 201 usuario creado; 409 si el correo ya existe |
-| Auth | `POST /auth/confirm` | 200 correo confirmado (con `AUTH_MODE=dummy` no verifica el código); 400 si el código no es de 6 dígitos |
-| Auth | `POST /auth/login` | 200 `{ accessToken, user }` |
+| Auth | `POST /auth/register` | 201 usuario creado (rol `USER`); 409 si el correo ya existe; 400 si falta un campo, la contraseña mide menos de 8 o se envía `role` |
+| Auth | `POST /auth/login` | 200 `{ accessToken, tokenType, expiresIn, user }`; 401 `Incorrect email or password` (mismo mensaje si el correo no existe o la contraseña es incorrecta) |
 | Auth | `GET /auth/me` | 200 usuario autenticado (401 sin sesión) |
 | Users | `GET /users` | 200 lista |
 | Users | `GET /users/:id` | 200 usuario con sus grabaciones; 404; 400 |
@@ -313,7 +320,7 @@ Formato de respuesta:
 | Situación | Status |
 | --- | --- |
 | Body/params/query inválidos, JSON mal formado, valor demasiado largo para la BD | 400 |
-| Falta o es inválido el token (solo `AUTH_MODE=cognito`) | 401 |
+| Falta el token, o es inválido, alterado o expiró | 401 |
 | Recurso inexistente (`P2025`), ruta inexistente | 404 |
 | Duplicado (`P2002`), usuario con grabaciones, referencia inválida (`P2003`) | 409 |
 | Body demasiado grande | 413 |
