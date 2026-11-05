@@ -3,40 +3,48 @@ import { env } from "../config/env.js";
 import { ApiError } from "../lib/apiError.js";
 import { assertCanAccess, currentUser, isAdmin } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
-import { SESSION_COOKIE } from "../middlewares/auth.js";
+import { SESSION_COOKIE, setSessionCookie } from "../middlewares/auth.js";
 import type { RecordingStatus } from "../models/recording.model.js";
 import { loginBody } from "../schemas/auth.schema.js";
 import { authenticate } from "./auth.controller.js";
 
 const STATUSES: RecordingStatus[] = ["UPLOADED", "PROCESSING", "DONE", "FAILED"];
 
+// Mensajes que /login muestra cuando el login con Google falla y redirige con ?error=<código>
+const LOGIN_ERRORS: Record<string, string> = {
+    google_denied: "Cancelaste el inicio de sesión con Google",
+    google_state: "La sesión de Google expiró o no es válida. Inténtalo de nuevo",
+    google_failed: "No se pudo iniciar sesión con Google",
+    google_unverified: "Tu correo de Google no está verificado",
+    google_disabled: "El inicio de sesión con Google no está configurado",
+};
+
+function loginError(code: unknown): string | undefined {
+    return typeof code === "string" ? LOGIN_ERRORS[code] : undefined;
+}
+
 export function loginForm(req: Request, res: Response) {
     if ((req.cookies as Record<string, string | undefined>)[SESSION_COOKIE]) {
         res.redirect("/");
         return;
     }
-    res.render("login", { title: "Iniciar sesión" });
+    res.render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: loginError(req.query.error) });
 }
 
 export async function login(req: Request, res: Response) {
     const input = loginBody.safeParse(req.body);
     if (!input.success) {
-        res.status(400).render("login", { title: "Iniciar sesión", error: "Escribe un correo válido y tu contraseña" });
+        res.status(400).render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: "Escribe un correo válido y tu contraseña" });
         return;
     }
 
     try {
         const session = await authenticate(input.data.email, input.data.password);
-        res.cookie(SESSION_COOKIE, session.accessToken, {
-            httpOnly: true,
-            sameSite: "lax",
-            secure: env.NODE_ENV === "production",
-            maxAge: session.expiresIn * 1000,
-        });
+        setSessionCookie(res, session.accessToken, session.expiresIn);
         res.redirect("/");
     } catch (err) {
         if (!(err instanceof ApiError) || err.status >= 500) throw err;
-        res.status(err.status).render("login", { title: "Iniciar sesión", error: "Correo o contraseña incorrectos" });
+        res.status(err.status).render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: "Correo o contraseña incorrectos" });
     }
 }
 

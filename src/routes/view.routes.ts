@@ -1,4 +1,6 @@
 import express, { Router } from "express";
+import { env } from "../config/env.js";
+import { googleCallback, googleStart } from "../controllers/google.controller.js";
 import {
     home,
     login,
@@ -10,6 +12,7 @@ import {
     viewErrorHandler,
     viewNotFound,
 } from "../controllers/view.controller.js";
+import { googleCallbackPath } from "../lib/google.js";
 import { viewAuth } from "../middlewares/auth.js";
 import { requireRole } from "../middlewares/authorize.js";
 import { validate } from "../middlewares/validate.js";
@@ -21,6 +24,9 @@ const router = Router();
 router.get("/login", loginForm);
 router.post("/login", express.urlencoded({ extended: false }), login);
 router.post("/logout", logout);
+
+router.get("/auth/google", googleStart);
+if (env.GOOGLE_ENABLED) router.get(googleCallbackPath(), googleCallback);
 
 router.get("/", viewAuth, home);
 router.use(["/recordings", "/users"], viewAuth);

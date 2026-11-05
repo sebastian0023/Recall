@@ -8,4 +8,8 @@
     <input id="password" name="password" type="password" autocomplete="current-password" required>
     <button type="submit">Entrar</button>
   </form>
+  {{#if googleEnabled}}
+    <div class="divider"><span>o</span></div>
+    <a class="google-btn" href="/auth/google">Continuar con Google</a>
+  {{/if}}
 </section>

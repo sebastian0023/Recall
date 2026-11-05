@@ -78,6 +78,7 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
 | `JWT_SECRET` | Secreto con el que se firman los JWT (obligatorio, mínimo 32 caracteres). El valor de `.env.example` es solo de desarrollo y se rechaza con `NODE_ENV=production`. Para generar uno: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `JWT_EXPIRES_IN` | Duración de la sesión: segundos (`3600`) o un número con unidad (`30s`, `15m`, `1h`, `7d`). Por defecto `1h`. Para probar un token expirado, bájala (p. ej. `5s`) y reinicia el API |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Login con Google (opcional). Sin ellas el botón no aparece. Ver [Login con Google](#login-con-google) |
 | `AWS_*`, `S3_BUCKET`, `BEDROCK_MODEL_ID` | Reservadas para entregas siguientes |
 
 > Todas las rutas del API, excepto `/health`, `register` y `login`, exigen `Authorization: Bearer <token>`. Ver [Roles y permisos](#roles-y-permisos).
@@ -150,6 +151,29 @@ En las vistas, entra en <http://localhost:3000/login> con cualquiera de esos cor
 
 El detalle de esta entrega y sus evidencias están en [documentacion-entrega-2.pdf](documentacion-entrega-2.pdf) (fuente: [docs/documentacion-entrega-2.md](docs/documentacion-entrega-2.md)).
 
+## Login con Google
+
+Flujo OAuth 2.0 / OpenID Connect (código de autorización) que usa la **misma sesión** que el login con contraseña: al terminar, el API guarda el mismo JWT en la cookie `recall_session`, así que los permisos son idénticos.
+
+**Configuración.** En [Google Cloud Console → Credenciales](https://console.cloud.google.com/apis/credentials) crea un *OAuth client ID* de tipo **Aplicación web** y agrega como *URI de redireccionamiento autorizado* exactamente el valor de `GOOGLE_CALLBACK_URL`. Luego pon en tu `.env`:
+
+```env
+GOOGLE_CLIENT_ID=<id de cliente>
+GOOGLE_CLIENT_SECRET=<secreto del cliente>
+GOOGLE_CALLBACK_URL=http://localhost:3000/google_confirm
+```
+
+La ruta del callback se toma de `GOOGLE_CALLBACK_URL` (no está escrita en el código): si cambias la URL, cambia solo el `.env` y el URI autorizado en Google. Las credenciales nunca se suben al repositorio.
+
+| Ruta | Qué hace |
+| --- | --- |
+| `GET /auth/google` | Genera `state` y `nonce`, los guarda en una cookie `httpOnly` de 10 minutos y redirige a Google. Aparece como botón **Continuar con Google** en `/login` |
+| `GET <ruta de GOOGLE_CALLBACK_URL>` (por defecto `/google_confirm`) | Verifica `state`, cambia el código por el `id_token` y valida emisor, audiencia, vigencia, `nonce` y que el correo esté **verificado** por Google. Abre la sesión y redirige a `/` |
+
+- **Vinculación por correo verificado:** si ya existe un usuario con ese correo (registrado con contraseña, sin importar mayúsculas), entra a esa cuenta; si no, se crea sin contraseña y con el **rol por defecto `USER`**. El rol nunca viene de Google. Un correo no verificado se rechaza.
+- **Errores:** si el usuario cancela, el `state` no coincide, el correo no está verificado o Google rechaza el código, se vuelve a `/login` con un mensaje claro.
+- Un usuario creado con Google no tiene contraseña, así que `POST /auth/login` le responde 401.
+
 ## Colección de peticiones
 
 [docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
@@ -175,7 +199,8 @@ Hechas con Handlebars ([express-handlebars](https://github.com/express-handlebar
 | `GET /recordings` | Listado de grabaciones con su usuario, estado, duración y número de resúmenes; filtro por estado (`?status=DONE`) |
 | `GET /recordings/:id` | Detalle: datos de la grabación, usuario, transcripción por hablante y resúmenes |
 | `GET /users` | Listado de usuarios con su número de grabaciones (solo administradores) |
-| `GET /login` · `POST /login` · `POST /logout` | Inicio y cierre de sesión de las vistas |
+| `GET /login` · `POST /login` · `POST /logout` | Inicio y cierre de sesión de las vistas (con botón de Google si está configurado) |
+| `GET /auth/google` · `GET /google_confirm` | Inicio y callback del login con Google |
 
 Todas usan el layout [views/layouts/main.hbs](views/layouts/main.hbs) con la barra de navegación. Los parámetros se validan con el mismo middleware `validate` del API: un id mal formado muestra una página de error 400, y uno inexistente, una página 404.
 
