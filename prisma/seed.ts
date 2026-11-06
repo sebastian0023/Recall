@@ -1,3 +1,4 @@
+import { hashPassword } from "../src/lib/password.js";
 import { prisma } from "../src/lib/prisma.js";
 import type { Prisma } from "../src/generated/prisma/client.js";
 
@@ -7,13 +8,16 @@ const REC = (n: number) => id("2", n);
 const TRANS = (n: number) => id("3", n);
 const SUM = (n: number) => id("4", n);
 
+// Contraseña de todos los usuarios del seed (documentada en el README). Solo para desarrollo
+const SEED_PASSWORD = "Recall2026!";
+
 const users: Prisma.UserCreateManyInput[] = [
-    { id: USER(1), cognitoSub: "seed-sebastian", email: "sebastian@recall.app", name: "Sebastián Macías" },
-    { id: USER(2), cognitoSub: "seed-emilio", email: "emilio@recall.app", name: "Emilio Guzmán" },
-    { id: USER(3), cognitoSub: "seed-ana", email: "ana.lopez@recall.app", name: "Ana López" },
-    { id: USER(4), cognitoSub: "seed-carlos", email: "carlos.ramirez@recall.app", name: "Carlos Ramírez" },
-    { id: USER(5), cognitoSub: "seed-mariana", email: "mariana.torres@recall.app", name: "Mariana Torres" },
-    { id: USER(6), cognitoSub: "seed-diego", email: "diego.hernandez@recall.app", name: "Diego Hernández" },
+    { id: USER(1), email: "sebastian@recall.app", name: "Sebastián Macías", role: "ADMIN" },
+    { id: USER(2), email: "emilio@recall.app", name: "Emilio Guzmán" },
+    { id: USER(3), email: "ana.lopez@recall.app", name: "Ana López" },
+    { id: USER(4), email: "carlos.ramirez@recall.app", name: "Carlos Ramírez" },
+    { id: USER(5), email: "mariana.torres@recall.app", name: "Mariana Torres" },
+    { id: USER(6), email: "diego.hernandez@recall.app", name: "Diego Hernández" },
 ];
 
 const recordings: Prisma.RecordingCreateManyInput[] = [
@@ -102,12 +106,13 @@ const summaries: Prisma.SummaryCreateManyInput[] = [
 ];
 
 async function main() {
+    const passwordHash = await hashPassword(SEED_PASSWORD);
     await prisma.$transaction([
         prisma.summary.deleteMany(),
         prisma.transcription.deleteMany(),
         prisma.recording.deleteMany(),
         prisma.user.deleteMany(),
-        prisma.user.createMany({ data: users }),
+        prisma.user.createMany({ data: users.map((user) => ({ ...user, passwordHash })) }),
         prisma.recording.createMany({ data: recordings }),
         prisma.transcription.createMany({ data: transcriptions }),
         prisma.summary.createMany({ data: summaries }),

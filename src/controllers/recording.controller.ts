@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import { ApiError } from "../lib/apiError.js";
+import { assertCanAccess, currentUser, isAdmin } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import type { CreateRecordInput, RecordingStatus, UpdateRecordInput } from "../models/recording.model.js";
 import { toPublicUser } from "../models/user.model.js";
 
-async function findRecordingOr404(id: string) {
+async function findRecordingOr404(id: string, req: Request) {
     const recording = await prisma.recording.findUnique({
         where: { id },
         include: {
@@ -15,19 +16,23 @@ async function findRecordingOr404(id: string) {
         },
     });
     if (!recording) throw new ApiError(404, "Recording not found");
+    assertCanAccess(currentUser(req), recording.userId);
     return recording;
 }
 
-// Nunca se expone cognitoSub del usuario relacionado
+// toPublicUser quita passwordHash del usuario relacionado (segunda capa; Prisma ya lo omite)
 function toPublicRecording<T extends { user?: Parameters<typeof toPublicUser>[0] }>(recording: T) {
     return recording.user ? { ...recording, user: toPublicUser(recording.user) } : recording;
 }
 
-export async function getRecordings(_req: Request, res: Response) {
+export async function getRecordings(req: Request, res: Response) {
     // Filtros opcionales ya validados por el middleware (?status=&userId=)
     const { status, userId } = res.locals.query as { status?: RecordingStatus; userId?: string };
+    const user = currentUser(req);
+    if (userId) assertCanAccess(user, userId);
+
     const recordings = await prisma.recording.findMany({
-        where: { status, userId },
+        where: { status, userId: isAdmin(user) ? userId : user.id },
         orderBy: { createdAt: "desc" },
         include: {
             user: true,
@@ -42,7 +47,7 @@ export async function getRecordings(_req: Request, res: Response) {
 }
 
 export async function getRecordingById(req: Request, res: Response) {
-    const recording = await findRecordingOr404(req.params.id as string);
+    const recording = await findRecordingOr404(req.params.id as string, req);
 
     res.status(200).json({
         data: toPublicRecording(recording),
@@ -52,7 +57,7 @@ export async function getRecordingById(req: Request, res: Response) {
 
 // Rutas anidadas: GET /recordings/:id/summaries y GET /recordings/:id/transcription
 export async function getRecordingSummaries(req: Request, res: Response) {
-    const recording = await findRecordingOr404(req.params.id as string);
+    const recording = await findRecordingOr404(req.params.id as string, req);
 
     res.status(200).json({
         data: recording.summaries,
@@ -61,7 +66,7 @@ export async function getRecordingSummaries(req: Request, res: Response) {
 }
 
 export async function getRecordingTranscription(req: Request, res: Response) {
-    const recording = await findRecordingOr404(req.params.id as string);
+    const recording = await findRecordingOr404(req.params.id as string, req);
     if (!recording.transcription) throw new ApiError(404, "Transcription not found");
 
     res.status(200).json({
@@ -72,12 +77,15 @@ export async function getRecordingTranscription(req: Request, res: Response) {
 
 export async function createRecording(req: Request, res: Response) {
     const { userId, title, s3Key, durationSec } = req.body as CreateRecordInput;
+    const user = currentUser(req);
+    const ownerId = userId ?? user.id;
+    assertCanAccess(user, ownerId);
 
-    const owner = await prisma.user.findUnique({ where: { id: userId } });
+    const owner = await prisma.user.findUnique({ where: { id: ownerId } });
     if (!owner) throw new ApiError(404, "User not found");
 
     const recording = await prisma.recording.create({
-        data: { userId, title, s3Key, durationSec },
+        data: { userId: ownerId, title, s3Key, durationSec },
     });
 
     res.status(201).json({
@@ -88,9 +96,11 @@ export async function createRecording(req: Request, res: Response) {
 
 export async function updateRecording(req: Request, res: Response) {
     const { title, s3Key, durationSec, status, errorMessage } = req.body as UpdateRecordInput;
+    const id = req.params.id as string;
+    await findRecordingOr404(id, req);
 
     const recording = await prisma.recording.update({
-        where: { id: req.params.id as string },
+        where: { id },
         data: { title, s3Key, durationSec, status, errorMessage },
     });
 
@@ -104,7 +114,7 @@ export async function updateRecording(req: Request, res: Response) {
 // Se eliminan summaries y transcription de la grabación y luego la grabación, todo en una transacción.
 export async function deleteRecording(req: Request, res: Response) {
     const id = req.params.id as string;
-    await findRecordingOr404(id);
+    await findRecordingOr404(id, req);
 
     await prisma.$transaction([
         prisma.summary.deleteMany({ where: { recordingId: id } }),
@@ -117,8 +127,11 @@ export async function deleteRecording(req: Request, res: Response) {
 
 // Mientras no exista la integración con Amazon Transcribe solo se marca la grabación como en proceso
 export async function processRecording(req: Request, res: Response) {
+    const id = req.params.id as string;
+    await findRecordingOr404(id, req);
+
     const recording = await prisma.recording.update({
-        where: { id: req.params.id as string },
+        where: { id },
         data: { status: "PROCESSING", transcribeJobId: `job-${randomUUID()}`, errorMessage: null },
     });
 

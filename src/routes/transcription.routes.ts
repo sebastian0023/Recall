@@ -6,7 +6,7 @@ import {
     getTranscriptions,
     updateTranscription,
 } from "../controllers/transcription.controller.js";
-import { auth } from "../middlewares/auth.js";
+import { requireAuth } from "../middlewares/auth.js";
 import { validate } from "../middlewares/validate.js";
 import { idParams } from "../schemas/common.schema.js";
 import {
@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 
-router.use(auth);
+router.use(requireAuth);
 
 router.get("/", validate({ query: listTranscriptionsQuery }), getTranscriptions);
 router.get("/:id", validate({ params: idParams }), getTranscriptionById);

@@ -1,3 +1,4 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import path from "node:path";
@@ -17,6 +18,7 @@ app.set("views", path.join(root, "views"));
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(root, "public")));
 
 app.get("/health", (_req, res) => {

@@ -2,18 +2,17 @@
 
 **Recall** es el REST API de una plataforma web que recibe audio de reuniones, clases y entrevistas, lo transcribe (Amazon Transcribe) y genera resúmenes con IA (Amazon Bedrock), sin depender de un dispositivo dedicado.
 
-## Alcance de la Entrega 2
+## Qué incluye
 
-- Persistencia real con PostgreSQL + Prisma: CRUD de users, recordings, transcriptions y summaries.
-- Conexión a la BD al arrancar (si falla, mensaje claro y el proceso termina).
-- Códigos HTTP correctos (200/201/204/400/404/409) y errores traducidos en un middleware central.
-- Validación de body, params y query con zod antes de llegar al controlador, con el error indicando qué campo falló.
-- Datos de prueba repetibles con `npm run seed`.
-- Colección de Postman en [docs/api.postman_collection.json](docs/api.postman_collection.json), con casos de error.
-- Vistas con Handlebars (layout con navegación, listado y detalle de grabaciones) con datos reales de la BD.
-- CI/CD con GitHub Actions: ESLint, typecheck/build, migraciones + seed + colección, SonarQube e imagen Docker.
+- **Persistencia:** PostgreSQL 17 + Prisma 7, con CRUD de users, recordings, transcriptions y summaries, y migraciones versionadas.
+- **Validación y errores:** zod valida body, params y query antes del controlador; un middleware central responde los errores en JSON con el status correcto.
+- **Autenticación propia:** registro y login con contraseña (bcrypt) y sesión con JWT (HS256). Login con Google opcional (OAuth 2.0 / OpenID Connect).
+- **Roles y permisos:** `USER` y `ADMIN`, con revisión del rol y del dueño de cada recurso (401 sin sesión, 403 sin permiso).
+- **Vistas con Handlebars:** registro, login, inicio, grabaciones, detalle y usuarios, con datos reales y la misma sesión.
+- **Datos de prueba** repetibles con `npm run seed` y **colección de Postman** con casos de error y de seguridad.
+- **CI/CD** con GitHub Actions: ESLint, build, migraciones + seed + colección, SonarQube e imagen Docker.
 
-El documento del proyecto (versión 2) está en la raíz: [documentacion.pdf](documentacion.pdf). Su fuente editable es [docs/documentacion.md](docs/documentacion.md): para regenerar el PDF, abre el archivo en VS Code con la extensión **Markdown PDF** (`yzane.markdown-pdf`, recomendada en `.vscode/extensions.json`), haz clic derecho → *Markdown PDF: Export (pdf)* y reemplaza `documentacion.pdf` en la raíz con el resultado. El encabezado y el pie de página ya están configurados en `.vscode/settings.json`.
+El documento del proyecto (versión 3) está en la raíz: [documentacion.pdf](documentacion.pdf). Su fuente editable es [docs/documentacion.md](docs/documentacion.md): para regenerar el PDF, abre el archivo en VS Code con la extensión **Markdown PDF** (`yzane.markdown-pdf`, recomendada en `.vscode/extensions.json`), haz clic derecho → *Markdown PDF: Export (pdf)* y reemplaza `documentacion.pdf` en la raíz con el resultado. El encabezado y el pie de página ya están configurados en `.vscode/settings.json`.
 
 ## Stack
 
@@ -25,6 +24,7 @@ El documento del proyecto (versión 2) está en la raíz: [documentacion.pdf](do
 | Framework | Express 5 |
 | Base de datos | PostgreSQL 17 (Docker Compose) |
 | ORM | Prisma 7 |
+| Autenticación | bcryptjs (contraseñas) + jsonwebtoken (JWT HS256) |
 | Vistas | Handlebars (express-handlebars) |
 | Linter | ESLint + typescript-eslint |
 | Gestor de paquetes | npm |
@@ -46,12 +46,12 @@ npm run build && npm start
 ```
 
 1. `npm ci` instala las dependencias y genera el cliente de Prisma (`postinstall`).
-2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml` (incluye `AUTH_MODE=dummy`, necesario para probar sin Cognito).
+2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml` (incluye un `JWT_SECRET` de desarrollo; para un servidor real genera uno propio, ver [Variables de entorno](#variables-de-entorno)).
 3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`). Espera unos segundos a que acepte conexiones antes del siguiente paso.
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
 5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
 6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar imprime `Connected to the database...`.
-7. Abre <http://localhost:3000> para ver las vistas, e importa la colección de Postman para probar el API.
+7. Abre <http://localhost:3000>: te lleva a `/login`. Entra con un usuario del seed (ver [Roles y permisos](#roles-y-permisos)) o crea una cuenta en `/register`. Para probar el API, importa la colección de Postman.
 
 Para desarrollo: `npm run dev` (recarga automática).
 
@@ -61,7 +61,9 @@ Verificación:
 
 ```bash
 curl localhost:3000/health
-curl localhost:3000/api/v1/recordings
+curl -s localhost:3000/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ana.lopez@recall.app","password":"Recall2026!"}'   # devuelve data.accessToken
+curl localhost:3000/api/v1/recordings -H "Authorization: Bearer <accessToken>"
 ```
 
 ### Variables de entorno
@@ -73,11 +75,12 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `PORT` | Puerto del API (3000) |
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (obligatoria) |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
-| `AUTH_MODE` | `dummy` (por defecto en `.env.example`): no se exige token, y `register`/`login` solo usan la BD. `cognito`: autenticación real con Amazon Cognito |
-| `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_CLIENT_SECRET` | Solo con `AUTH_MODE=cognito` |
+| `JWT_SECRET` | Secreto con el que se firman los JWT (obligatorio, mínimo 32 caracteres). El valor de `.env.example` es solo de desarrollo y se rechaza con `NODE_ENV=production`. Para generar uno: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `JWT_EXPIRES_IN` | Duración de la sesión: segundos (`3600`) o un número con unidad (`30s`, `15m`, `1h`, `7d`). Por defecto `1h`. Para probar un token expirado, bájala (p. ej. `5s`) y reinicia el API |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Login con Google (opcional). Sin ellas el botón no aparece. Ver [Login con Google](#login-con-google) |
 | `AWS_*`, `S3_BUCKET`, `BEDROCK_MODEL_ID` | Reservadas para entregas siguientes |
 
-> La autenticación real y los permisos se evalúan en la siguiente entrega. Con `AUTH_MODE=dummy` todas las rutas se pueden probar sin token.
+> Todas las rutas del API, excepto `/health`, `register` y `login`, exigen `Authorization: Bearer <token>`. Ver [Roles y permisos](#roles-y-permisos).
 
 ## Scripts
 
@@ -106,12 +109,77 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 
 Los ids son fijos y fáciles de reconocer (`11111111-…-000000000001` = user 1, `22222222-…` = recordings, `33333333-…` = transcriptions, `44444444-…` = summaries), así la colección de Postman funciona justo después del seed.
 
+## Roles y permisos
+
+Cada usuario tiene un `role` (enum `USER` | `ADMIN`, por defecto `USER`). El middleware `requireAuth` verifica el JWT, lee al usuario de la BD (así el rol siempre está al día) y lo deja en `req.user`; [src/middlewares/authorize.ts](src/middlewares/authorize.ts) y [src/lib/permissions.ts](src/lib/permissions.ts) revisan lo que puede hacer. El token no guarda el rol. Sin token, con un token inválido, alterado o vencido responde 401; sin permiso, 403. En grabaciones, transcripciones y resúmenes, un id inexistente responde 404 antes de revisar al dueño.
+
+| Acción | Invitado | Usuario | Admin |
+| --- | --- | --- | --- |
+| Registrarse e iniciar sesión | Sí | Sí | Sí |
+| Ver su perfil (`GET /auth/me`) | No | Sí | Sí |
+| Listar usuarios | No | No | Sí |
+| Ver o editar usuario | No | Propio | Todos |
+| Cambiar el rol de un usuario | No | No | Sí |
+| Eliminar usuario | No | No | Sí |
+| Listar grabaciones | No | Propias | Todas |
+| Crear grabación | No | A su nombre | Para cualquier usuario |
+| Ver, editar, procesar o eliminar grabación | No | Propias | Todas |
+| Listar, ver, crear, editar o eliminar transcripciones y resúmenes | No | De sus grabaciones | Todos |
+| Vistas web | No | Sus datos | Todos los datos |
+
+En `POST /recordings`, `userId` es opcional: si no se envía, la grabación queda a nombre de quien la crea. Un usuario que envía el `userId` de otro recibe 403.
+
+El rol se cambia con `PATCH /users/:id` y `{ "role": "ADMIN" }`, solo como administrador. El registro siempre crea usuarios `USER` (enviar `role` responde 400); el primer administrador viene del seed o se asigna directamente en la base de datos.
+
+**Cómo probarlo.** `npm run seed` crea todos los usuarios con la contraseña `Recall2026!` (guardada con bcrypt en la BD):
+
+| Usuario del seed | Rol | Contraseña |
+| --- | --- | --- |
+| `sebastian@recall.app` | `ADMIN` | `Recall2026!` |
+| `ana.lopez@recall.app` | `USER` | `Recall2026!` |
+
+Los demás usuarios del seed (`emilio@`, `carlos.ramirez@`, `mariana.torres@`, `diego.hernandez@`, todos `@recall.app`) son `USER` y usan la misma contraseña.
+
+```bash
+TOKEN=$(curl -s localhost:3000/api/v1/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"ana.lopez@recall.app","password":"Recall2026!"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).data.accessToken')
+curl localhost:3000/api/v1/recordings -H "Authorization: Bearer $TOKEN"
+```
+
+En las vistas, entra en <http://localhost:3000/login> con cualquiera de esos correos. La sesión se guarda en una cookie `httpOnly`.
+
+## Login con Google
+
+Flujo OAuth 2.0 / OpenID Connect (código de autorización) que usa la **misma sesión** que el login con contraseña: al terminar, el API guarda el mismo JWT en la cookie `recall_session`, así que los permisos son idénticos.
+
+**Configuración.** En [Google Cloud Console → Credenciales](https://console.cloud.google.com/apis/credentials) crea un *OAuth client ID* de tipo **Aplicación web** y agrega como *URI de redireccionamiento autorizado* exactamente el valor de `GOOGLE_CALLBACK_URL`. Luego pon en tu `.env`:
+
+```env
+GOOGLE_CLIENT_ID=<id de cliente>
+GOOGLE_CLIENT_SECRET=<secreto del cliente>
+GOOGLE_CALLBACK_URL=http://localhost:3000/google_confirm
+```
+
+La ruta del callback se toma de `GOOGLE_CALLBACK_URL` (no está escrita en el código): si cambias la URL, cambia solo el `.env` y el URI autorizado en Google. Las credenciales nunca se suben al repositorio.
+
+| Ruta | Qué hace |
+| --- | --- |
+| `GET /auth/google` | Genera `state` y `nonce`, los guarda en una cookie `httpOnly` de 10 minutos y redirige a Google. Aparece como botón **Continuar con Google** en `/login` |
+| `GET <ruta de GOOGLE_CALLBACK_URL>` (por defecto `/google_confirm`) | Verifica `state`, cambia el código por el `id_token` y valida emisor, audiencia, vigencia, `nonce` y que el correo esté **verificado** por Google. Abre la sesión y redirige a `/` |
+
+- **Vinculación por correo verificado:** si ya existe un usuario con ese correo (registrado con contraseña, sin importar mayúsculas), entra a esa cuenta; si no, se crea sin contraseña y con el **rol por defecto `USER`**. El rol nunca viene de Google. Un correo no verificado se rechaza.
+- **Errores:** si el usuario cancela, el `state` no coincide, el correo no está verificado o Google rechaza el código, se vuelve a `/login` con un mensaje claro.
+- Un usuario creado con Google no tiene contraseña, así que `POST /auth/login` le responde 401.
+
 ## Colección de peticiones
 
 [docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
 
-- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries y Errores generales.
+- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales.
+- Las peticiones usan el token de `{{adminToken}}`; la carpeta Permisos prueba 401 y 403 con `{{userToken}}`. Las dos variables se llenan solas: las peticiones de login de la carpeta Auth guardan el `accessToken` del admin (`adminToken`) y de Ana López (`userToken`), así que hay que correr la carpeta Auth antes que las demás (Run collection ya lo hace en orden).
 - Al menos una petición por endpoint, más los casos de error: cuerpo inválido, id inexistente, id mal formado, duplicado (409), JSON mal formado y ruta inexistente.
+- Casos de seguridad: registro con `role: "ADMIN"` (400), login sin contraseña (400), la misma respuesta para contraseña incorrecta y correo inexistente, la contraseña nunca aparece en las respuestas, sin token (401) y tokens alterados (401): `sub` cambiado, firma modificada, `alg: none` y firmado con otra clave. Los tokens alterados se generan en el *pre-request* a partir de un token real.
+- **Token expirado:** no se puede automatizar en la colección. Para probarlo, pon `JWT_EXPIRES_IN=5s` en el `.env`, reinicia el API, inicia sesión, espera 5 segundos y repite la petición: responde 401 `Token expired`.
 - La URL base es la variable de colección `{{baseUrl}}` (por defecto `http://localhost:3000`). Si cambias el puerto, cambia solo esa variable.
 - Las variables `userId`, `recordingId`, `transcriptionId` y `summaryId` apuntan a registros del seed; `newUserId`, `newRecordingId`, etc. se llenan solas al crear recursos.
 - Cada petición trae pruebas del status esperado. Para correr toda la colección en orden: **Run collection** en Postman, o desde la terminal:
@@ -129,7 +197,10 @@ Hechas con Handlebars ([express-handlebars](https://github.com/express-handlebar
 | `GET /` | Inicio: conteo de cada tabla y últimas grabaciones |
 | `GET /recordings` | Listado de grabaciones con su usuario, estado, duración y número de resúmenes; filtro por estado (`?status=DONE`) |
 | `GET /recordings/:id` | Detalle: datos de la grabación, usuario, transcripción por hablante y resúmenes |
-| `GET /users` | Listado de usuarios con su número de grabaciones |
+| `GET /users` | Listado de usuarios con su número de grabaciones (solo administradores) |
+| `GET /register` · `POST /register` | Crear cuenta (nombre, correo y contraseña). Siempre crea un `USER`, inicia la sesión y redirige a `/`. Muestra errores por campo y 409 si el correo ya existe |
+| `GET /login` · `POST /login` · `POST /logout` | Inicio y cierre de sesión de las vistas (con botón de Google si está configurado) |
+| `GET /auth/google` · `GET /google_confirm` | Inicio y callback del login con Google |
 
 Todas usan el layout [views/layouts/main.hbs](views/layouts/main.hbs) con la barra de navegación. Los parámetros se validan con el mismo middleware `validate` del API: un id mal formado muestra una página de error 400, y uno inexistente, una página 404.
 
@@ -158,18 +229,18 @@ recall-api/
 ├── docs/
 │   ├── api.postman_collection.json
 │   ├── documentacion.md      # fuente editable del documento (Markdown PDF)
-│   └── img/                  # logo y diagramas del documento
+│   └── img/                  # logo, diagramas y evidencias del documento
 ├── prisma/
 │   ├── schema.prisma         # esquema de la base de datos
 │   ├── migrations/           # migraciones versionadas
 │   └── seed.ts               # datos de prueba (npm run seed)
 ├── public/                   # CSS de las vistas
-├── views/                    # plantillas Handlebars (layouts/, recordings/, users/)
+├── views/                    # plantillas Handlebars (layouts/, recordings/, users/, login, register)
 ├── src/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
-│   ├── lib/                  # prisma, cognito, ApiError
+│   ├── lib/                  # prisma, password (bcrypt), token (JWT), permissions, ApiError
 │   ├── middlewares/          # auth, validate, errorHandler, notFound
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
 │   ├── models/               # tipos TypeScript por entidad
@@ -179,7 +250,7 @@ recall-api/
 ├── Dockerfile
 ├── eslint.config.js
 ├── sonar-project.properties
-├── documentacion.pdf         # documento del proyecto (versión 2)
+├── documentacion.pdf         # documento del proyecto (versión 3)
 ├── prisma.config.ts
 ├── .env.example
 └── package.json
@@ -190,7 +261,8 @@ recall-api/
 - `User` 1 — N `Recording`
 - `Recording` 1 — 1 `Transcription` (`recordingId` único)
 - `Recording` 1 — N `Summary`
-- Índices únicos: `User.email`, `User.cognitoSub`, `Transcription.recordingId`.
+- Índices únicos: `User.email`, `Transcription.recordingId`.
+- `User.passwordHash` guarda el hash bcrypt (nulo para usuarios que entren solo con un proveedor externo). Prisma lo omite de todas las consultas y nunca aparece en una respuesta.
 
 Relaciones visibles en las respuestas:
 
@@ -216,11 +288,10 @@ Prefijo `/api/v1` (excepto `/health`).
 | Módulo | Método y ruta | Respuesta |
 | --- | --- | --- |
 | Health | `GET /health` | 200 `{ status: "ok" }` |
-| Auth | `POST /auth/register` | 201 usuario creado; 409 si el correo ya existe |
-| Auth | `POST /auth/confirm` | 200 correo confirmado (con `AUTH_MODE=dummy` no verifica el código); 400 si el código no es de 6 dígitos |
-| Auth | `POST /auth/login` | 200 `{ accessToken, user }` |
+| Auth | `POST /auth/register` | 201 usuario creado (rol `USER`); 409 si el correo ya existe; 400 si falta un campo, la contraseña mide menos de 8 o se envía `role` |
+| Auth | `POST /auth/login` | 200 `{ accessToken, tokenType, expiresIn, user }`; 401 `Incorrect email or password` (mismo mensaje si el correo no existe o la contraseña es incorrecta) |
 | Auth | `GET /auth/me` | 200 usuario autenticado (401 sin sesión) |
-| Users | `GET /users` | 200 lista |
+| Users | `GET /users` | 200 lista (solo `ADMIN`) |
 | Users | `GET /users/:id` | 200 usuario con sus grabaciones; 404; 400 |
 | Users | `PATCH /users/:id` | 200; 404; 409 si el correo ya existe |
 | Users | `DELETE /users/:id` | 204; 404; 409 si tiene grabaciones |
@@ -274,7 +345,7 @@ Formato de respuesta:
 | Situación | Status |
 | --- | --- |
 | Body/params/query inválidos, JSON mal formado, valor demasiado largo para la BD | 400 |
-| Falta o es inválido el token (solo `AUTH_MODE=cognito`) | 401 |
+| Falta el token, o es inválido, alterado o expiró | 401 |
 | Recurso inexistente (`P2025`), ruta inexistente | 404 |
 | Duplicado (`P2002`), usuario con grabaciones, referencia inválida (`P2003`) | 409 |
 | Body demasiado grande | 413 |
@@ -283,4 +354,4 @@ Formato de respuesta:
 ## Integrantes
 
 - **Daniel Sebastián Macías Macías:** conexión, modelos, CRUD, validaciones, manejo de errores y autenticación
-- **Emilio Daniel Guzmán Seda:** seed, vistas con Handlebars, colección de Postman y CI/CD
+- **Emilio Daniel Guzmán Seda:** seed, vistas con Handlebars (incluido el registro), roles y permisos, colección de Postman y casos de seguridad, CI/CD y documento

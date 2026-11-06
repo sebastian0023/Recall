@@ -6,14 +6,14 @@ import {
     getSummaryById,
     updateSummary,
 } from "../controllers/summary.controller.js";
-import { auth } from "../middlewares/auth.js";
+import { requireAuth } from "../middlewares/auth.js";
 import { validate } from "../middlewares/validate.js";
 import { idParams } from "../schemas/common.schema.js";
 import { createSummaryBody, listSummariesQuery, updateSummaryBody } from "../schemas/summary.schema.js";
 
 const router = Router();
 
-router.use(auth);
+router.use(requireAuth);
 
 router.get("/", validate({ query: listSummariesQuery }), getSummaries);
 router.get("/:id", validate({ params: idParams }), getSummaryById);

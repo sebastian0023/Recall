@@ -13,7 +13,7 @@ async function main() {
   }
 
   app.listen(env.PORT, () => {
-    console.log(`Connected to the database. Recall API listening on port ${env.PORT} (auth: ${env.AUTH_MODE})`);
+    console.log(`Connected to the database. Recall API listening on port ${env.PORT}`);
   });
 }
 

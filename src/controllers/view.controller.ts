@@ -1,17 +1,125 @@
 import type { NextFunction, Request, Response } from "express";
+import { env } from "../config/env.js";
 import { ApiError } from "../lib/apiError.js";
+import { assertCanAccess, currentUser, isAdmin } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
+import { SESSION_COOKIE, setSessionCookie } from "../middlewares/auth.js";
 import type { RecordingStatus } from "../models/recording.model.js";
+import { signToken } from "../lib/token.js";
+import { loginBody, registerBody } from "../schemas/auth.schema.js";
+import { authenticate, createUser } from "./auth.controller.js";
 
 const STATUSES: RecordingStatus[] = ["UPLOADED", "PROCESSING", "DONE", "FAILED"];
 
-export async function home(_req: Request, res: Response) {
+// Mensajes que /login muestra cuando el login con Google falla y redirige con ?error=<código>
+const LOGIN_ERRORS: Record<string, string> = {
+    google_denied: "Cancelaste el inicio de sesión con Google",
+    google_state: "La sesión de Google expiró o no es válida. Inténtalo de nuevo",
+    google_failed: "No se pudo iniciar sesión con Google",
+    google_unverified: "Tu correo de Google no está verificado",
+    google_disabled: "El inicio de sesión con Google no está configurado",
+};
+
+function loginError(code: unknown): string | undefined {
+    return typeof code === "string" ? LOGIN_ERRORS[code] : undefined;
+}
+
+export function loginForm(req: Request, res: Response) {
+    if ((req.cookies as Record<string, string | undefined>)[SESSION_COOKIE]) {
+        res.redirect("/");
+        return;
+    }
+    res.render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: loginError(req.query.error) });
+}
+
+export async function login(req: Request, res: Response) {
+    const input = loginBody.safeParse(req.body);
+    if (!input.success) {
+        res.status(400).render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: "Escribe un correo válido y tu contraseña" });
+        return;
+    }
+
+    try {
+        const session = await authenticate(input.data.email, input.data.password);
+        setSessionCookie(res, session.accessToken, session.expiresIn);
+        res.redirect("/");
+    } catch (err) {
+        if (!(err instanceof ApiError) || err.status >= 500) throw err;
+        res.status(err.status).render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: "Correo o contraseña incorrectos" });
+    }
+}
+
+const REGISTER_ERRORS: Record<string, string> = {
+    email: "Escribe un correo válido",
+    password: "La contraseña debe tener entre 8 y 72 caracteres",
+    name: "Escribe tu nombre (máximo 100 caracteres)",
+};
+
+function hasSession(req: Request): boolean {
+    return Boolean((req.cookies as Record<string, string | undefined>)[SESSION_COOKIE]);
+}
+
+function renderRegister(res: Response, status: number, values: { email?: unknown; name?: unknown }, errors?: string[]) {
+    res.status(status).render("register", {
+        title: "Crear cuenta",
+        googleEnabled: env.GOOGLE_ENABLED,
+        email: typeof values.email === "string" ? values.email : "",
+        name: typeof values.name === "string" ? values.name : "",
+        errors,
+    });
+}
+
+export function registerForm(req: Request, res: Response) {
+    if (hasSession(req)) {
+        res.redirect("/");
+        return;
+    }
+    renderRegister(res, 200, {});
+}
+
+export async function register(req: Request, res: Response) {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const input = registerBody.safeParse(body);
+    if (!input.success) {
+        const fields = new Set(input.error.issues.map((issue) => String(issue.path[0] ?? "")));
+        const errors = [...fields].map((field) => REGISTER_ERRORS[field] ?? "El formulario tiene campos no permitidos");
+        renderRegister(res, 400, body, errors);
+        return;
+    }
+
+    try {
+        const user = await createUser(input.data);
+        const { token, expiresIn } = signToken(user.id);
+        setSessionCookie(res, token, expiresIn);
+        res.redirect("/");
+    } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 409) throw err;
+        renderRegister(res, 409, body, ["Ese correo ya está registrado"]);
+    }
+}
+
+export function logout(_req: Request, res: Response) {
+    res.clearCookie(SESSION_COOKIE);
+    res.redirect("/login");
+}
+
+export async function home(req: Request, res: Response) {
+    const user = currentUser(req);
+    const own = !isAdmin(user);
+    const recordingScope = own ? { userId: user.id } : undefined;
+    const childScope = own ? { recording: { userId: user.id } } : undefined;
+
     const [users, recordings, transcriptions, summaries, latest] = await Promise.all([
-        prisma.user.count(),
-        prisma.recording.count(),
-        prisma.transcription.count(),
-        prisma.summary.count(),
-        prisma.recording.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { user: true } }),
+        own ? 0 : prisma.user.count(),
+        prisma.recording.count({ where: recordingScope }),
+        prisma.transcription.count({ where: childScope }),
+        prisma.summary.count({ where: childScope }),
+        prisma.recording.findMany({
+            where: recordingScope,
+            orderBy: { createdAt: "desc" },
+            take: 5,
+            include: { user: true },
+        }),
     ]);
 
     res.render("home", {
@@ -21,10 +129,13 @@ export async function home(_req: Request, res: Response) {
     });
 }
 
-export async function recordingList(_req: Request, res: Response) {
+export async function recordingList(req: Request, res: Response) {
     const { status, userId } = res.locals.query as { status?: RecordingStatus; userId?: string };
+    const user = currentUser(req);
+    if (userId) assertCanAccess(user, userId);
+
     const recordings = await prisma.recording.findMany({
-        where: { status, userId },
+        where: { status, userId: isAdmin(user) ? userId : user.id },
         orderBy: { createdAt: "desc" },
         include: { user: true, _count: { select: { summaries: true } }, transcription: { select: { id: true } } },
     });
@@ -47,6 +158,7 @@ export async function recordingDetail(req: Request, res: Response) {
         },
     });
     if (!recording) throw new ApiError(404, "La grabación no existe");
+    assertCanAccess(currentUser(req), recording.userId);
 
     res.render("recordings/detail", { title: recording.title, recording });
 }
