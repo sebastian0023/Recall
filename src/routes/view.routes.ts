@@ -8,6 +8,8 @@ import {
     logout,
     recordingDetail,
     recordingList,
+    register,
+    registerForm,
     userList,
     viewErrorHandler,
     viewNotFound,
@@ -23,6 +25,8 @@ const router = Router();
 
 router.get("/login", loginForm);
 router.post("/login", express.urlencoded({ extended: false }), login);
+router.get("/register", registerForm);
+router.post("/register", express.urlencoded({ extended: false }), register);
 router.post("/logout", logout);
 
 router.get("/auth/google", googleStart);

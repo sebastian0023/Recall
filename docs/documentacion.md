@@ -2,14 +2,21 @@
   body { font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; }
   h1, h2, h3 { color: #0F4761; font-weight: normal; }
   h1 { font-size: 20pt; } h2 { font-size: 15pt; margin-top: 1.4em; } h3 { font-size: 12.5pt; }
+  h2, h3 { break-after: avoid; page-break-after: avoid; }
   table { border-collapse: collapse; width: 100%; font-size: 9.5pt; margin: 0.4em 0 1em; }
   th { background: #DCE6F0; text-align: left; }
   th, td { border: 1px solid #BFBFBF; padding: 4px 6px; vertical-align: top; }
-  img { max-width: 100%; }
+  tr, img, pre { break-inside: avoid; page-break-inside: avoid; }
+  img { max-width: 100%; display: block; margin: 8px auto 2px; }
+  img.evidence { border: 1px solid #D9D9D9; }
+  .pair { display: flex; gap: 10px; break-inside: avoid; page-break-inside: avoid; }
+  .pair img { width: 50%; min-width: 0; margin: 4px 0; }
   .cover { text-align: center; padding-top: 40px; }
   .cover p { margin: 4px 0; }
-  .caption { text-align: center; color: #595959; font-size: 9pt; }
+  .cover img { display: inline; }
+  .caption { text-align: center; color: #595959; font-size: 9pt; margin-top: 2px; }
   .page-break { page-break-after: always; }
+  .nota { background: #FFF4D6; border-left: 4px solid #C98A00; padding: 8px 10px; font-size: 10pt; }
 </style>
 
 <div class="cover">
@@ -19,36 +26,35 @@
   <br>
   <img src="img/iteso-logo.png" alt="ITESO" width="150">
   <br><br><br><br>
-  <p style="font-size: 14pt">Entrega 1: Persistencia de Datos (documento v2)</p>
+  <p style="font-size: 14pt">Entrega 2: Autenticación y autorización (documento v3)</p>
   <br>
   <p>Presentan</p>
   <p>Emilio Daniel Guzmán Seda</p>
   <p>Daniel Sebastián Macías Macías</p>
   <p>Profesor: Francisco Javier Sevilla Medina</p>
   <br>
-  <p>Fecha: domingo 25 de octubre de 2026</p>
+  <p>Fecha: jueves 5 de noviembre de 2026</p>
 </div>
 
 <div class="page-break"></div>
 
 # Proyecto Integrador — Recall
 
-**Documento del proyecto · versión 2** · Entrega 1: Persistencia de datos · 25 de octubre de 2026
+**Documento del proyecto · versión 3** · Entrega 2: Autenticación y autorización · 5 de noviembre de 2026
 
-Recall es el REST API de una plataforma web que recibe audio de reuniones, clases y entrevistas, lo transcribe y genera resúmenes con IA, sin depender de un dispositivo dedicado. El MVP se mantiene lo más simple posible: un solo API en TypeScript con Express, PostgreSQL en Docker y servicios de AWS (Cognito, S3, Transcribe y Bedrock).
+Recall es el REST API de una plataforma web que recibe audio de reuniones, clases y entrevistas, lo transcribe y genera resúmenes con IA, sin depender de un dispositivo dedicado. El MVP se mantiene lo más simple posible: un solo API en TypeScript con Express, PostgreSQL en Docker, autenticación propia con JWT, login opcional con Google y servicios de AWS (S3, Transcribe y Bedrock) para las siguientes entregas.
 
-## Cambios respecto a la versión 1
+## Cambios respecto a la versión 2
 
-| Tema | Versión 1 | Versión 2 (esta entrega) |
+| Tema | Versión 2 | Versión 3 (esta entrega) |
 | --- | --- | --- |
-| Persistencia | Endpoints con datos dummy | CRUD real con Prisma sobre PostgreSQL en los 4 modelos |
-| Autenticación | JWT propio + bcrypt | Amazon Cognito (`AUTH_MODE=cognito`); modo dummy para probar sin AWS. La BD ya no guarda contraseñas |
-| Modelo User | `passwordHash` | `cognitoSub` (único): liga al usuario de la BD con su identidad en Cognito |
-| Borrado | Cascada en la base de datos | Llaves foráneas RESTRICT; los dependientes se borran en el código o se impide el borrado (409) |
-| Validaciones | No había | Middleware `validate` con zod para body, params y query |
-| Errores | Formato básico | `errorHandler` central que traduce errores de Prisma (P2002 → 409, P2025 → 404, etc.) |
-| Nuevos entregables | — | Seed repetible, colección de Postman, vistas con Handlebars y CI/CD con GitHub Actions |
-| Secciones nuevas | — | Requisitos del curso, Roles y permisos, Flujo de trabajo |
+| Autenticación | Amazon Cognito, con un modo de prueba sin verificación | Autenticación propia: contraseñas con bcrypt y sesión con JWT firmado (HS256). Se eliminó Cognito |
+| Modelo User | `cognitoSub` (único) | `passwordHash` (bcrypt, nulo para cuentas de Google) y `role` |
+| Login con proveedor | Planeado con el Hosted UI de Cognito | Google con OAuth 2.0 / OpenID Connect, implementado en el propio API |
+| Roles y permisos | Solo documentados | `USER` y `ADMIN` implementados en el API y en las vistas, con revisión del dueño de cada recurso |
+| Vistas | Listado y detalle públicos | Registro, login con sesión en cookie, y cada persona ve solo lo que le corresponde |
+| Colección de Postman | 66 peticiones | 95 peticiones, con carpetas de Permisos y casos de seguridad |
+| Documento | Dos documentos (proyecto y entrega 2) | Un solo documento con las evidencias de las pruebas |
 
 ## Datos generales
 
@@ -62,12 +68,12 @@ Recall es el REST API de una plataforma web que recibe audio de reuniones, clase
 
 ### Integrantes
 
-| Nombre | Responsabilidades en esta entrega |
+| Nombre | Responsabilidades |
 | --- | --- |
-| Daniel Sebastián Macías Macías | Conexión a la BD, modelos y migraciones, CRUD con Prisma, validaciones con zod, manejo de errores y autenticación con Cognito |
-| Emilio Daniel Guzmán Seda | Seed de la base de datos, vistas con Handlebars, colección de Postman, CI/CD (ESLint, SonarQube, Docker) y documento |
+| Daniel Sebastián Macías Macías | Conexión a la BD, modelos y migraciones, CRUD con Prisma, validaciones con zod, manejo de errores, autenticación con JWT y bcrypt, y login con Google |
+| Emilio Daniel Guzmán Seda | Seed, vistas con Handlebars (incluido el registro), roles y permisos, colección de Postman y casos de seguridad, CI/CD (ESLint, SonarQube, Docker) y documento |
 
-Ambos integrantes trabajan en ramas por funcionalidad que llegan a `develop` y luego a `main` mediante Pull Request.
+Ambos integrantes trabajan en ramas por funcionalidad que llegan a `main` mediante Pull Request.
 
 ## Descripción
 
@@ -81,24 +87,26 @@ Recall permite subir un archivo de audio. El API lo guarda en Amazon S3, lo tran
 
 ### Alcance del MVP
 
-- Registro e inicio de sesión con Amazon Cognito.
+- Registro e inicio de sesión con correo y contraseña, o con Google.
+- Roles `USER` y `ADMIN`: cada usuario administra solo sus datos; el administrador ve todo.
 - CRUD de grabaciones; el archivo de audio se guarda en S3.
 - Transcripción en español con Amazon Transcribe.
 - Resumen con Amazon Bedrock usando una de tres plantillas fijas: reunión, clase o entrevista.
 - Consulta y edición de transcripciones y resúmenes, desde el API y desde vistas web.
 
-### Esta entrega (Persistencia de datos)
+### Esta entrega (Autenticación y autorización)
 
-- El API lee y escribe en PostgreSQL con Prisma; las migraciones están versionadas en `prisma/migrations`.
-- Todo body, params y query se valida con zod antes de llegar al controlador.
-- Los errores se responden desde un middleware central con un JSON consistente.
-- `npm run seed` carga datos de prueba; `docs/api.postman_collection.json` tiene la colección de peticiones.
-- Vistas con Handlebars: layout con navegación, listado y detalle de grabaciones con datos reales.
+- Registro y login propios: la contraseña se guarda con bcrypt y la sesión es un JWT firmado con HS256.
+- Login con Google (OAuth 2.0 / OpenID Connect) que abre la misma sesión que el login con contraseña.
+- Roles `USER` y `ADMIN` con una matriz de permisos aplicada en el API y en las vistas.
+- Vistas de registro y login, con la sesión guardada en una cookie `httpOnly`.
+- Colección de Postman con los casos de seguridad: tokens alterados, sin token, intento de asignarse un rol y respuestas que no revelan información.
 
 ### Fuera del alcance
 
 - Carpetas, etiquetas y plantillas personalizadas.
 - Transcripción en tiempo real del audio, aplicación móvil y compartir grabaciones.
+- Recuperación de contraseña y verificación de correo para cuentas con contraseña.
 - Despliegue en la nube: el proyecto corre en local (la imagen Docker queda lista para un despliegue futuro).
 
 ## Proyectos similares y referencias
@@ -131,7 +139,9 @@ Recall toma como referencia principal a Plaud, pero elimina la dependencia de ha
 | Base de datos | PostgreSQL 17 | Usuarios, grabaciones, transcripciones y resúmenes |
 | ORM y migraciones | Prisma 7 | Esquema, migraciones versionadas y consultas tipadas |
 | Validación | zod | Esquemas de body, params y query |
-| Vistas | Handlebars (express-handlebars) | Layout, listado y detalle con datos de la BD |
+| Autenticación | bcryptjs y jsonwebtoken | Hash de contraseñas y sesión con JWT (HS256) |
+| Login con proveedor | Google OAuth 2.0 / OpenID Connect | Login opcional con una cuenta de Google |
+| Vistas | Handlebars (express-handlebars) | Registro, login, listados y detalle con datos de la BD |
 | Contenedores | Docker Compose / Dockerfile | PostgreSQL local e imagen del API |
 | Calidad y CI/CD | ESLint, SonarQube Cloud, GitHub Actions | Lint, quality gate, pruebas de la colección e imagen Docker en cada push |
 
@@ -141,20 +151,24 @@ Recall toma como referencia principal a Plaud, pero elimina la dependencia de ha
 | --- | --- | --- |
 | express, cors, dotenv | Servidor HTTP, orígenes permitidos y variables de entorno | Planeación |
 | prisma, @prisma/client, @prisma/adapter-pg, pg | Esquema, migraciones y conexión a PostgreSQL | Planeación / Entrega 1 |
-| zod | Validación de body, params y query | Entrega 1 (esta) |
-| express-handlebars | Motor de vistas | Entrega 1 (esta) |
-| @aws-sdk/client-cognito-identity-provider, aws-jwt-verify | Registro, login y verificación del access token de Cognito | Entrega 1 (esta) |
-| eslint, typescript-eslint | Linter de TypeScript (también corre en CI) | Entrega 1 (esta) |
+| zod | Validación de body, params y query | Entrega 1 |
+| express-handlebars | Motor de vistas | Entrega 1 |
+| bcryptjs | Hash de contraseñas (10 rondas) | Entrega 2 (esta) |
+| jsonwebtoken | Firma y verificación de los JWT | Entrega 2 (esta) |
+| cookie-parser | Leer la cookie de sesión de las vistas | Entrega 2 (esta) |
+| eslint, typescript-eslint | Linter de TypeScript (también corre en CI) | Entrega 1 |
 | tsx, typescript | Ejecución en desarrollo, seed y compilación | Planeación |
 | multer, @aws-sdk/client-s3 | Recibir el audio y subirlo a S3 | Siguiente entrega |
 | @aws-sdk/client-transcribe, client-bedrock-runtime | Transcribir y resumir | Siguientes entregas |
 
-### Servicios de AWS
+El login con Google no usa una librería: el API habla directamente con los endpoints de autorización y de token de Google con `fetch`.
+
+### Servicios externos
 
 | Servicio | Uso |
 | --- | --- |
-| Amazon Cognito | Registro, confirmación por correo, login y emisión de tokens. Ya integrado (`AUTH_MODE=cognito`) |
-| Amazon S3 | Guardar los archivos de audio en un bucket privado |
+| Google (OAuth 2.0 / OpenID Connect) | Login opcional con una cuenta de Google. Se activa con tres variables de entorno |
+| Amazon S3 | Guardar los archivos de audio en un bucket privado (siguiente entrega) |
 | Amazon Transcribe | Transcripción por lotes en español (es-US o es-MX) con separación de hablantes |
 | Amazon Bedrock | Generar el resumen con un modelo de lenguaje a partir de la plantilla elegida |
 
@@ -166,24 +180,25 @@ Recall toma como referencia principal a Plaud, pero elimina la dependencia de ha
 | ORM | Prisma | TypeORM, Drizzle |
 | Validación | zod | express-validator, joi |
 | Vistas | Handlebars | EJS, Pug, cliente React separado |
+| Autenticación | JWT propio con bcrypt | Amazon Cognito, Auth0, sesiones en servidor |
+| Login con proveedor | Google con OAuth 2.0 directo | Passport.js, Cognito Hosted UI |
 | Transcripción | Amazon Transcribe | OpenAI Whisper, Deepgram, AssemblyAI |
 | Resúmenes | Amazon Bedrock | OpenAI API, Ollama local |
 | Almacenamiento | Amazon S3 | Cloudflare R2, MinIO |
-| Autenticación | Amazon Cognito | JWT propio con bcrypt, Auth0 |
 
-Se cambió de JWT propio a Amazon Cognito para no guardar contraseñas en la base de datos y para tener, con el mismo servicio, verificación por correo y login con proveedores externos (Google).
+En la versión 2 se usaba Amazon Cognito. Se cambió a autenticación propia porque la entrega pide implementar el registro, el login y el manejo de tokens en el API, y porque Cognito dependía de una sola cuenta de AWS para probar cualquier cosa. Con JWT propio, cualquier integrante (y el profesor) puede correr y probar todo en local.
 
 ## Arquitectura
 
 ![Arquitectura del MVP](img/arquitectura.png)
 
-<p class="caption">Arquitectura del MVP · un API en Express, PostgreSQL local y servicios de AWS</p>
+<p class="caption">Arquitectura del MVP · un API en Express, PostgreSQL local y servicios externos</p>
 
-El API corre en la máquina del desarrollador, se conecta a PostgreSQL en Docker y usa el SDK de AWS. Sigue el patrón MVC:
+El API corre en la máquina del desarrollador y se conecta a PostgreSQL en Docker. Sigue el patrón MVC:
 
 - **Rutas** (`src/routes/`): definen los endpoints de cada módulo bajo `/api/v1` y las rutas de las vistas, y aplican los middlewares.
-- **Middlewares** (`src/middlewares/`): `auth` (token de Cognito), `validate` (zod), `notFound` (404) y `errorHandler` (respuesta de error uniforme).
-- **Controladores** (`src/controllers/`): reciben la petición validada, consultan la BD con Prisma y responden JSON o renderizan una vista.
+- **Middlewares** (`src/middlewares/`): `requireAuth` y `viewAuth` (verifican el JWT), `requireRole` y `requireSelfOrAdmin` (permisos), `validate` (zod), `notFound` (404) y `errorHandler` (respuesta de error uniforme).
+- **Controladores** (`src/controllers/`): reciben la petición validada, revisan permisos, consultan la BD con Prisma y responden JSON o renderizan una vista.
 - **Modelos** (`prisma/schema.prisma` y `src/models/`): esquema de la BD y tipos de entrada de cada entidad.
 - **Vistas** (`views/`): plantillas Handlebars con un layout base y navegación.
 
@@ -195,11 +210,22 @@ El API corre en la máquina del desarrollador, se conecta a PostgreSQL en Docker
 
 ## Base de datos
 
-La base de datos es relacional (PostgreSQL 17) con 4 tablas definidas en `prisma/schema.prisma`. Las llaves primarias son UUID y las migraciones están versionadas en `prisma/migrations`. El diagrama se actualizó respecto a la versión 1.
+La base de datos es relacional (PostgreSQL 17) con 4 tablas definidas en `prisma/schema.prisma`. Las llaves primarias son UUID y las 5 migraciones están versionadas en `prisma/migrations`. El diagrama se actualizó: User ya no tiene `cognitoSub` y ahora tiene `passwordHash` y `role`.
 
 ![Diagrama entidad-relación](img/er.png)
 
-<p class="caption">Diagrama entidad-relación actualizado · 4 tablas en PostgreSQL</p>
+<p class="caption">Diagrama entidad-relación · 4 tablas en PostgreSQL</p>
+
+### Modelo User
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| `id` | UUID | Llave primaria |
+| `email` | texto, único | Duplicado responde 409 |
+| `passwordHash` | texto, opcional | Hash bcrypt de 10 rondas. Nulo para cuentas creadas con Google. Prisma lo omite en todas las consultas, así que nunca llega a una respuesta |
+| `name` | texto | Hasta 100 caracteres |
+| `role` | enum `USER` · `ADMIN` | `USER` por defecto. Nunca se toma del registro ni de Google |
+| `createdAt`, `updatedAt` | fecha | Automáticos |
 
 ### Relaciones
 
@@ -211,9 +237,9 @@ La base de datos es relacional (PostgreSQL 17) con 4 tablas definidas en `prisma
 
 ### Índices y reglas
 
-- Índices únicos: `User.email`, `User.cognitoSub` y `Transcription.recordingId`. Un duplicado responde 409.
+- Índices únicos: `User.email` y `Transcription.recordingId`. Un duplicado responde 409.
 - Índices de búsqueda: `Recording.userId` y `Summary.recordingId`.
-- `Recording.status` es un enum: UPLOADED, PROCESSING, DONE, FAILED. `Summary.template` es un enum: MEETING, CLASS, INTERVIEW.
+- `Recording.status` es un enum: UPLOADED, PROCESSING, DONE, FAILED. `Summary.template` es un enum: MEETING, CLASS, INTERVIEW. `User.role` es un enum: USER, ADMIN.
 - Los fragmentos por hablante se guardan en un campo JSON (`segments`) para no crear una tabla extra.
 - El audio no se guarda en la base de datos, solo su llave en S3 (`s3Key`).
 
@@ -227,27 +253,88 @@ Borrado físico resuelto en el código. Las llaves foráneas son RESTRICT, así 
 | User | Si tiene grabaciones no se elimina: responde 409. Primero hay que borrar sus grabaciones. |
 | Transcription / Summary | Se eliminan directamente (no tienen dependientes). Responde 204. |
 
+## Autenticación
+
+### Registro y login con contraseña
+
+- `POST /api/v1/auth/register` recibe `name`, `email` y `password` (8 a 72 caracteres). El esquema es estricto: cualquier otro campo, como `role`, responde 400. El usuario siempre se crea con rol `USER`.
+- La contraseña se guarda con **bcrypt** (10 rondas). Nunca se guarda en texto plano y nunca aparece en una respuesta.
+- `POST /api/v1/auth/login` devuelve `{ accessToken, tokenType: "Bearer", expiresIn, user }`.
+- **Mismo mensaje en el login:** si el correo no existe o la contraseña es incorrecta, responde lo mismo, `401 Incorrect email or password`. Además compara siempre contra un hash bcrypt, aunque el correo no exista, para que el tiempo de respuesta tampoco revele qué correos están registrados.
+
+### Sesión con JWT
+
+| Aspecto | Cómo se hace |
+| --- | --- |
+| Algoritmo | HS256, firmado con `JWT_SECRET` (mínimo 32 caracteres). Solo se acepta HS256, así que un token con `alg: none` se rechaza |
+| Contenido | Solo `sub` (id del usuario), `iat` y `exp`. El rol no va en el token: se lee de la BD en cada petición, así un cambio de rol surte efecto de inmediato |
+| Vigencia | `JWT_EXPIRES_IN` (por defecto `1h`). Un token vencido responde `401 Token expired` |
+| API | `Authorization: Bearer <token>`. Sin token responde `401 Unauthorized`; un token alterado o firmado con otra clave, `401 Invalid token` |
+| Vistas | El mismo JWT en la cookie `recall_session`, con `httpOnly`, `sameSite=lax` y `secure` en producción. Las rutas del API no aceptan la cookie, solo el header, para evitar ataques CSRF |
+| Producción | El API se niega a arrancar con el `JWT_SECRET` de ejemplo cuando `NODE_ENV=production` |
+
+### Login con Google
+
+Flujo OAuth 2.0 / OpenID Connect con código de autorización, implementado sin librerías externas:
+
+1. `GET /auth/google` genera un `state` y un `nonce` aleatorios, los guarda en una cookie `httpOnly` de 10 minutos y redirige a Google.
+2. Google regresa a la URL de `GOOGLE_CALLBACK_URL` (por defecto `/google_confirm`). El API revisa que el `state` coincida con el de la cookie, cambia el código por el `id_token` y valida el emisor, la audiencia, la vigencia, el `nonce` y que el correo esté **verificado** por Google.
+3. Si ya existe un usuario con ese correo, entra a esa cuenta; si no, la crea sin contraseña y con rol `USER`. El rol nunca viene de Google.
+4. Abre la misma sesión que el login con contraseña (JWT en la cookie), así que los permisos son idénticos.
+
+Es opcional: sin `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `GOOGLE_CALLBACK_URL` el botón «Continuar con Google» no aparece. Las credenciales solo viven en el `.env`.
+
+## Roles y permisos
+
+| Rol | Descripción |
+| --- | --- |
+| Invitado | Persona sin sesión. Solo puede registrarse, iniciar sesión y consultar `/health`. |
+| Usuario (USER) | Rol por defecto al registrarse. Administra únicamente sus propias grabaciones, transcripciones y resúmenes. |
+| Administrador (ADMIN) | Soporte y moderación: ve y administra los recursos de todos los usuarios y puede eliminar usuarios. |
+
+El rol solo lo cambia un administrador con `PATCH /users/:id` y `{ "role": "ADMIN" }`. El primer administrador viene del seed (Sebastián Macías) o se asigna directamente en la base de datos.
+
+### Matriz de permisos
+
+«Propios» significa que la acción solo se permite sobre recursos del mismo usuario; sobre los de otro responde 403.
+
+| Acción | Invitado | Usuario | Admin | Dónde se aplica |
+| --- | --- | --- | --- | --- |
+| Registrarse e iniciar sesión | Sí | Sí | Sí | Rutas públicas |
+| Ver su perfil (`GET /auth/me`) | No | Sí | Sí | `requireAuth` |
+| Listar usuarios | No | No | Sí | `requireRole("ADMIN")` |
+| Ver o editar usuario | No | Propio | Todos | `requireSelfOrAdmin` |
+| Cambiar el rol de un usuario | No | No | Sí | `updateUser` |
+| Eliminar usuario | No | No | Sí | `requireRole("ADMIN")` |
+| Listar grabaciones | No | Propias | Todas | Filtro en `getRecordings` |
+| Crear grabación | No | A su nombre | Para cualquier usuario | `assertCanAccess` |
+| Ver, editar, procesar o eliminar grabación | No | Propias | Todas | `findRecordingOr404` |
+| Transcripciones y resúmenes | No | De sus grabaciones | Todos | `assertCanAccess` |
+| Vistas web | No | Sus datos | Todos los datos | `viewAuth` y los mismos filtros |
+
+Orden de las respuestas: primero 401 (sin sesión válida) y 400 (datos inválidos). En grabaciones, transcripciones y resúmenes sigue 404 (no existe) y luego 403 (no es tuyo). En `/users/:id`, un usuario normal recibe 403 con cualquier id que no sea el suyo, exista o no.
+
 ## REST API
 
 Todas las rutas usan el prefijo `/api/v1` (excepto `/health` y las vistas). Las respuestas exitosas tienen la forma `{ data, message }` y los errores `{ error: { message, details? } }`.
 
 ### Endpoints
 
-| Módulo | Método y ruta | Respuestas |
-| --- | --- | --- |
-| Health | `GET /health` | 200 |
-| Auth | `POST /auth/register` | 201; 400; 409 correo duplicado |
-| Auth | `POST /auth/confirm` | 200; 400 código inválido |
-| Auth | `POST /auth/login` | 200 con accessToken; 401 |
-| Auth | `GET /auth/me` | 200; 401 sin sesión |
-| Users | `GET /users` · `GET /users/:id` | 200 (el detalle incluye sus grabaciones); 400; 404 |
-| Users | `PATCH /users/:id` · `DELETE /users/:id` | 200 / 204; 400; 404; 409 correo duplicado o con grabaciones |
-| Recordings | `GET /recordings` · `GET /recordings/:id` | 200 (incluyen user; el detalle, transcription y summaries); 400; 404 |
-| Recordings | `GET /recordings/:id/summaries` · `/transcription` | 200 (rutas anidadas); 404 |
-| Recordings | `POST` · `PATCH /:id` · `DELETE /:id` | 201 / 200 / 204; 400; 404 |
-| Recordings | `POST /recordings/:id/process` | 202; 404 |
-| Transcriptions | `GET` · `GET /:id` · `POST` · `PATCH /:id` · `DELETE /:id` | 200 / 201 / 204; 400; 404; 409 si la grabación ya tiene transcripción |
-| Summaries | `GET` · `GET /:id` · `POST` · `PATCH /:id` · `DELETE /:id` | 200 / 201 / 204; 400; 404 |
+| Módulo | Método y ruta | Acceso | Respuestas |
+| --- | --- | --- | --- |
+| Health | `GET /health` | Público | 200 |
+| Auth | `POST /auth/register` | Público | 201 (rol USER); 400; 409 correo duplicado |
+| Auth | `POST /auth/login` | Público | 200 con `accessToken`; 400; 401 genérico |
+| Auth | `GET /auth/me` | Sesión | 200; 401 |
+| Users | `GET /users` | ADMIN | 200; 401; 403 |
+| Users | `GET /users/:id` · `PATCH /users/:id` | Propio o ADMIN | 200; 400; 401; 403; 404; 409 correo duplicado |
+| Users | `DELETE /users/:id` | ADMIN | 204; 401; 403; 404; 409 con grabaciones |
+| Recordings | `GET /recordings` · `GET /recordings/:id` | Propias o ADMIN | 200; 400; 401; 403; 404 |
+| Recordings | `GET /recordings/:id/summaries` · `/transcription` | Propias o ADMIN | 200 (rutas anidadas); 401; 403; 404 |
+| Recordings | `POST` · `PATCH /:id` · `DELETE /:id` | Propias o ADMIN | 201 / 200 / 204; 400; 401; 403; 404 |
+| Recordings | `POST /recordings/:id/process` | Propias o ADMIN | 202; 401; 403; 404 |
+| Transcriptions | `GET` · `GET /:id` · `POST` · `PATCH /:id` · `DELETE /:id` | De sus grabaciones o ADMIN | 200 / 201 / 204; 400; 401; 403; 404; 409 si la grabación ya tiene transcripción |
+| Summaries | `GET` · `GET /:id` · `POST` · `PATCH /:id` · `DELETE /:id` | De sus grabaciones o ADMIN | 200 / 201 / 204; 400; 401; 403; 404 |
 
 Los listados aceptan filtros validados: `?status=&userId=` en recordings, `?recordingId=&template=` en summaries y `?recordingId=` en transcriptions.
 
@@ -258,85 +345,123 @@ Los listados aceptan filtros validados: `?status=&userId=` en recordings, `?reco
 - El `errorHandler` central traduce los errores de Prisma: P2002 → 409, P2025 → 404, P2003 → 409, P2023 → 400. Nunca responde con el stack ni con el código de la BD; ese detalle solo se escribe en la consola del servidor.
 - Las rutas inexistentes responden 404 en JSON.
 
-## Datos de prueba, colección y vistas
+## Vistas
+
+| Ruta | Vista | Acceso |
+| --- | --- | --- |
+| `GET /register` · `POST /register` | Crear cuenta: nombre, correo y contraseña. Valida cada campo, responde 409 si el correo ya existe, crea un `USER`, abre la sesión y redirige al inicio | Público |
+| `GET /login` · `POST /login` · `POST /logout` | Iniciar y cerrar sesión, con enlace al registro y botón de Google si está configurado | Público |
+| `GET /auth/google` · `GET /google_confirm` | Inicio y regreso del login con Google | Público |
+| `GET /` | Inicio: conteos y últimas grabaciones | Sesión (sus datos) |
+| `GET /recordings` · `GET /recordings/:id` | Listado con filtro por estado y detalle con transcripción y resúmenes | Sesión (propias, o todas si es ADMIN) |
+| `GET /users` | Usuarios con su rol y su número de grabaciones | ADMIN |
+
+Sin sesión, las vistas protegidas redirigen a `/login`. La barra muestra el nombre y el rol, y oculta «Usuarios» a quien no es administrador.
+
+## Datos de prueba y colección
 
 ### Seed
 
-`npm run seed` (`prisma/seed.ts`) limpia las 4 tablas y vuelve a cargar los mismos registros en una transacción, por lo que se puede correr varias veces sin errores ni duplicados: 6 usuarios, 8 grabaciones (con los 4 estados), 5 transcripciones y 6 resúmenes de las 3 plantillas. Los ids son fijos para que la colección de Postman funcione justo después del seed.
+`npm run seed` (`prisma/seed.ts`) limpia las 4 tablas y vuelve a cargar los mismos registros en una transacción, por lo que se puede correr varias veces sin errores ni duplicados: 6 usuarios, 8 grabaciones (con los 4 estados), 5 transcripciones y 6 resúmenes de las 3 plantillas. Todos los usuarios usan la contraseña `Recall2026!`, guardada con bcrypt. Sebastián Macías es `ADMIN`; los demás, `USER`.
 
-### Colección de peticiones
+### Colección de Postman
 
-`docs/api.postman_collection.json`: 86 peticiones organizadas por módulo, con al menos una por endpoint y los casos de error (cuerpo inválido, id inexistente, id mal formado, duplicado, JSON mal formado, ruta inexistente, 401 y 403). La URL base está en la variable `{{baseUrl}}` y cada petición trae pruebas del status esperado, así que la colección completa se puede correr con newman.
+`docs/api.postman_collection.json` tiene **95 peticiones** en 8 carpetas: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales. La URL base está en la variable `{{baseUrl}}`, y los tokens de admin y de usuario se guardan solos al correr la carpeta Auth.
 
-### Vistas
-
-| Ruta | Vista |
+| Caso de seguridad | Respuesta esperada |
 | --- | --- |
-| `GET /` | Inicio: conteo de cada tabla y últimas grabaciones |
-| `GET /recordings` | Listado de grabaciones con usuario, estado, duración y resúmenes; filtro por estado |
-| `GET /recordings/:id` | Detalle: datos de la grabación, usuario, transcripción por hablante y resúmenes |
-| `GET /users` | Listado de usuarios con su número de grabaciones |
+| Registro con `role: "ADMIN"` en el body | 400, indica el campo `role` |
+| Login sin contraseña | 400, indica el campo `password` |
+| Contraseña incorrecta y correo inexistente | 401 con exactamente la misma respuesta |
+| La contraseña nunca aparece en las respuestas | Registro, login, perfil y usuarios no contienen `password` |
+| Sin token (perfil, crear grabación, eliminar usuario y listados) | 401 `Unauthorized` |
+| Token alterado: `sub` cambiado al del admin | 401 `Invalid token` |
+| Token alterado: firma modificada | 401 `Invalid token` |
+| Token sin firma (`alg: none`) | 401 `Invalid token` |
+| Token firmado con otra clave | 401 `Invalid token` |
+| Usuario intenta acciones de otro o de admin | 403 |
+
+Los tokens alterados se generan en el *pre-request* a partir de un token real, así que la prueba siempre ataca un token válido del mismo servidor. El **token expirado** no se puede automatizar en Postman sin esperar a que venza, así que se prueba a mano con `JWT_EXPIRES_IN` corto (ver Evidencia 4).
+
+## Pruebas y evidencia
+
+Las pruebas se corrieron el 5 de noviembre de 2026 en una base PostgreSQL 17 desechable, con las 5 migraciones aplicadas y los datos del seed. Las imágenes de terminal son la salida real de los comandos, y las de las vistas son capturas del navegador con la aplicación en ejecución.
+
+### Calidad y migraciones
+
+![Lint, typecheck, migraciones, seed y build](img/evidencias/prueba-calidad.png)
+
+<p class="caption">Evidencia 1 · ESLint y TypeScript sin errores; la base queda idéntica a <code>schema.prisma</code></p>
+
+### Colección de Postman
+
+Corrieron las 95 peticiones con newman: 163 aserciones y ninguna falla. La imagen muestra los casos de seguridad y el resumen de toda la colección.
+
+![Colección de Postman](img/evidencias/prueba-newman.png)
+
+<p class="caption">Evidencia 2 · Casos de seguridad de la colección y resumen de las 95 peticiones</p>
+
+### Vista de registro
+
+![Registro probado con curl](img/evidencias/prueba-registro.png)
+
+<p class="caption">Evidencia 3 · El registro crea la cuenta e inicia sesión; rechaza el correo duplicado, los datos inválidos y el formulario alterado con <code>role=ADMIN</code></p>
+
+<div class="pair"><img class="evidence" src="img/evidencias/vista-login.jpg" alt="Login con enlace al registro"><img class="evidence" src="img/evidencias/vista-registro.jpg" alt="Formulario de registro"></div>
+
+<p class="caption">Evidencia 3a · Login con el enlace «Crear cuenta» y formulario de registro</p>
+
+<div class="pair"><img class="evidence" src="img/evidencias/vista-registro-duplicado.jpg" alt="Correo ya registrado"><img class="evidence" src="img/evidencias/vista-registro-exitoso.jpg" alt="Cuenta creada"></div>
+
+<p class="caption">Evidencia 3b · Correo ya registrado (409) y cuenta nueva con la sesión abierta como Usuario</p>
+
+### Token expirado
+
+![Token expirado](img/evidencias/prueba-expirado.png)
+
+<p class="caption">Evidencia 4 · Con <code>JWT_EXPIRES_IN=3s</code>, el mismo token funciona al inicio y 5 segundos después responde 401</p>
+
+### Login y permisos en las vistas
+
+<div class="pair"><img class="evidence" src="img/evidencias/vista-login-incorrecto.jpg" alt="Login incorrecto"><img class="evidence" src="img/evidencias/vista-grabaciones-usuario.jpg" alt="Grabaciones de Ana López"></div>
+
+<p class="caption">Evidencia 5 · Contraseña incorrecta con mensaje genérico, y Ana López (USER) ve solo sus 2 grabaciones</p>
+
+<div class="pair"><img class="evidence" src="img/evidencias/vista-403-usuario.jpg" alt="403 en Usuarios"><img class="evidence" src="img/evidencias/vista-usuarios-admin.jpg" alt="Usuarios como administrador"></div>
+
+<p class="caption">Evidencia 6 · Ana López recibe 403 en «Usuarios»; Sebastián Macías (ADMIN) ve la lista con los roles</p>
+
+![Detalle como administrador](img/evidencias/vista-detalle-admin.jpg)
+
+<p class="caption">Evidencia 7 · El administrador abre una grabación de Ana López</p>
+
+<p class="nota"><strong>Login con Google:</strong> requiere las credenciales OAuth del proyecto, que no se suben al repositorio. Se prueba en local con <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> y <code>GOOGLE_CALLBACK_URL</code> en el <code>.env</code> (ver README).</p>
 
 ## Requisitos del curso
 
-Cómo cubre Recall cada requisito del curso y en qué entrega se implementa.
-
 | Requisito | Cómo lo cubre Recall | Estado |
 | --- | --- | --- |
-| Base de datos | PostgreSQL 17 con Prisma: 4 tablas relacionadas, índices únicos y migraciones versionadas. | Hecho (esta entrega) |
-| Validaciones | Middleware `validate` con zod para body, params y query; errores por campo con status 400. | Hecho (esta entrega) |
-| MVC | Modelos (Prisma + tipos), vistas (Handlebars) y controladores, conectados por rutas por módulo. | Hecho (esta entrega) |
-| Vistas | Handlebars: layout base con navegación, listado y detalle de grabaciones con datos reales. | Base hecha; se amplían en las siguientes entregas |
-| Autenticación y permisos | Amazon Cognito para registro y login; el middleware `auth` verifica el access token. Permisos por rol (ver Roles y permisos). | Hecho (autenticación y permisos por rol) |
-| Login con proveedor | Google como proveedor federado en Cognito (OAuth 2.0 con el Hosted UI). El usuario se crea o se liga por `cognitoSub`. | Entrega 2 |
-| Correos | Cognito envía el código de verificación al registrarse. Con Amazon SES se avisará al usuario cuando su resumen esté listo. | Verificación hecha; aviso por correo pendiente |
+| Base de datos | PostgreSQL 17 con Prisma: 4 tablas relacionadas, índices únicos y migraciones versionadas. | Hecho |
+| Validaciones | Middleware `validate` con zod para body, params y query; errores por campo con status 400. | Hecho |
+| MVC | Modelos (Prisma + tipos), vistas (Handlebars) y controladores, conectados por rutas por módulo. | Hecho |
+| Vistas | Handlebars: registro, login, inicio, listado y detalle de grabaciones, y usuarios, con datos reales y permisos. | Hecho |
+| Autenticación y permisos | Registro y login propios con bcrypt y JWT; roles `USER` y `ADMIN` con matriz de permisos en el API y las vistas. | Hecho (esta entrega) |
+| Login con proveedor | Google con OAuth 2.0 / OpenID Connect: vincula por correo verificado o crea un `USER`. | Hecho (esta entrega) |
+| Correos | Amazon SES para avisar al usuario cuando su resumen esté listo, y para verificar el correo al registrarse. | Pendiente |
 | Archivos | Subida del audio con multer a un bucket privado de S3; la BD guarda solo `s3Key`. | Entrega 3 (archivos) |
-| Servicio de terceros | Amazon Transcribe (transcripción) y Amazon Bedrock (resúmenes), además de Cognito y S3. | Cognito hecho; Transcribe y Bedrock pendientes |
+| Servicio de terceros | Amazon Transcribe (transcripción) y Amazon Bedrock (resúmenes), además de Google y S3. | Google hecho; Transcribe y Bedrock pendientes |
 | Tiempo real (websockets) | Socket.IO: el API emite el cambio de estado de una grabación (PROCESSING → DONE o FAILED) a la sala del usuario, para que la vista se actualice sin recargar. | Entrega posterior |
-
-## Roles y permisos
-
-El rol se guarda en el campo `role` (enum USER | ADMIN, por defecto USER) del modelo User. Después de `auth`, el middleware `authorize` y `src/lib/permissions.ts` revisan el rol y el dueño del recurso. Las vistas usan una sesión en cookie `httpOnly` con las mismas reglas. El rol solo lo cambia un administrador con `PATCH /users/:id`.
-
-| Rol | Descripción |
-| --- | --- |
-| Invitado | Persona sin sesión. Solo puede registrarse, confirmar su correo, iniciar sesión y consultar `/health`. |
-| Usuario (USER) | Rol por defecto al registrarse. Administra únicamente sus propias grabaciones, transcripciones y resúmenes. |
-| Administrador (ADMIN) | Soporte y moderación: ve y administra los recursos de todos los usuarios y puede eliminar usuarios. |
-
-### Matriz de permisos
-
-«Propios» significa que la acción solo se permite sobre recursos del mismo usuario; sobre los de otro responde 403.
-
-| Acción | Invitado | Usuario | Admin |
-| --- | --- | --- | --- |
-| Registrarse, confirmar correo, iniciar sesión | Sí | Sí | Sí |
-| Ver su perfil (`GET /auth/me`) | No | Sí | Sí |
-| Listar usuarios | No | No | Sí |
-| Ver usuario | No | Propios | Todos |
-| Editar usuario | No | Propios | Todos |
-| Eliminar usuario | No | No | Sí |
-| Listar grabaciones | No | Propias | Todas |
-| Crear grabación | No | Sí (a su nombre) | Sí |
-| Ver, editar o eliminar grabación | No | Propias | Todas |
-| Procesar grabación (transcribir y resumir) | No | Propias | Todas |
-| Ver o editar transcripciones y resúmenes | No | De sus grabaciones | Todos |
-| Crear o eliminar transcripciones y resúmenes | No | De sus grabaciones | Todos |
-| Vistas web | No | Sus datos | Todos los datos |
 
 ## Flujo de trabajo y CI/CD
 
-- Ramas: `main` (lo que se evalúa), `develop` (integración) y ramas por funcionalidad (por ejemplo `auth_feature`, `develop_emi_two`). Nadie trabaja directo en main.
-- Todo llega a develop y luego a main por Pull Request revisado por el otro integrante.
-- El commit que se evalúa se etiqueta como `entrega-1` en main.
-
-Los workflows de GitHub Actions corren en cada push y en cada Pull Request:
+- Ramas por funcionalidad (por ejemplo `auth_jwt`, `dev_emi_three`) que llegan a `main` por Pull Request revisado por el otro integrante. Nadie trabaja directo en `main`.
+- El commit que se evalúa en cada entrega se etiqueta en `main`: `entrega-1` y `entrega-2`.
 
 | Workflow | Qué revisa |
 | --- | --- |
-| `ci.yml` | ESLint; prisma validate, typecheck y build; con un PostgreSQL de servicio aplica las migraciones, corre el seed dos veces, arranca el API, corre la colección de Postman con newman y revisa que las vistas muestren datos. |
+| `ci.yml` | ESLint; `prisma validate`, typecheck y build; con un PostgreSQL de servicio aplica las migraciones, corre el seed dos veces, arranca el API, corre la colección de Postman con newman y revisa que las vistas muestren datos con una sesión real. |
 | `sonarqube.yml` | Análisis de SonarQube Cloud (bugs, code smells, duplicación y vulnerabilidades) con quality gate: si no pasa, el workflow falla. |
-| `docker.yml` | Construye la imagen del API; en push a develop o main la publica en GitHub Container Registry. |
+| `docker.yml` | Construye la imagen del API; en push a `develop` o `main` la publica en GitHub Container Registry. |
 
 ## Consideraciones
 
@@ -344,18 +469,18 @@ Los workflows de GitHub Actions corren en cada push y en cada Pull Request:
 
 - Las grabaciones contienen voces y datos personales, por lo que aplica la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP).
 - El usuario debe contar con el consentimiento de las personas grabadas.
-- La base de datos no guarda contraseñas: las administra Amazon Cognito. Las respuestas nunca exponen `cognitoSub` ni detalles internos.
-- El bucket de S3 será privado. Las credenciales solo viven en el `.env`, que está en `.gitignore`; `.env.example` no tiene valores secretos.
+- Las contraseñas se guardan con bcrypt y `passwordHash` nunca sale en una respuesta. El login no revela qué correos existen.
+- `JWT_SECRET`, las credenciales de Google y las de AWS solo viven en el `.env`, que está en `.gitignore`. El `.env.example` trae un `JWT_SECRET` de desarrollo que se rechaza en producción.
+- `npm run seed` vacía las tablas: se usa solo en desarrollo.
 
 ### Costos
 
-- Cognito tiene capa gratuita para el volumen del proyecto. S3, Transcribe y Bedrock cobran por uso: se configurará una alerta de AWS Budgets y una duración máxima de audio.
+- Google OAuth no tiene costo. S3, Transcribe y Bedrock cobran por uso: se configurará una alerta de AWS Budgets y una duración máxima de audio.
 - GitHub Actions y SonarQube Cloud son gratuitos para este uso.
 
 ### Próximos pasos
 
 | Entrega | Pendientes |
 | --- | --- |
-| Entrega 2: autenticación | Login con Google en Cognito y documentación del API con Swagger. |
 | Entrega 3: archivos | Subida de audios con multer a S3. |
-| Entregas siguientes | Transcripción con Amazon Transcribe, resúmenes con Amazon Bedrock, aviso por correo con SES, websockets con Socket.IO, paginación y filtros. |
+| Entregas siguientes | Documentación del API con Swagger, transcripción con Amazon Transcribe, resúmenes con Amazon Bedrock, correos con SES, websockets con Socket.IO, paginación y filtros. |

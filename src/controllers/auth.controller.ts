@@ -6,17 +6,19 @@ import { prisma } from "../lib/prisma.js";
 import { signToken } from "../lib/token.js";
 import { type LoginInput, type RegisterInput, toPublicUser } from "../models/user.model.js";
 
-export async function register(req: Request, res: Response) {
-    const { email, password, name } = req.body as RegisterInput;
-
+export async function createUser({ email, password, name }: RegisterInput) {
     const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) throw new ApiError(409, "Email already registered");
 
     // El rol nunca viene del body: el registro siempre crea un USER (default del esquema).
     // Si dos registros del mismo correo coinciden, el índice único responde P2002 -> 409 en el errorHandler
-    const user = await prisma.user.create({
+    return prisma.user.create({
         data: { email, name, passwordHash: await hashPassword(password) },
     });
+}
+
+export async function register(req: Request, res: Response) {
+    const user = await createUser(req.body as RegisterInput);
 
     res.status(201).json({
         data: toPublicUser(user),

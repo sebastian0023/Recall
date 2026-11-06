@@ -5,8 +5,9 @@ import { assertCanAccess, currentUser, isAdmin } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import { SESSION_COOKIE, setSessionCookie } from "../middlewares/auth.js";
 import type { RecordingStatus } from "../models/recording.model.js";
-import { loginBody } from "../schemas/auth.schema.js";
-import { authenticate } from "./auth.controller.js";
+import { signToken } from "../lib/token.js";
+import { loginBody, registerBody } from "../schemas/auth.schema.js";
+import { authenticate, createUser } from "./auth.controller.js";
 
 const STATUSES: RecordingStatus[] = ["UPLOADED", "PROCESSING", "DONE", "FAILED"];
 
@@ -45,6 +46,55 @@ export async function login(req: Request, res: Response) {
     } catch (err) {
         if (!(err instanceof ApiError) || err.status >= 500) throw err;
         res.status(err.status).render("login", { title: "Iniciar sesión", googleEnabled: env.GOOGLE_ENABLED, error: "Correo o contraseña incorrectos" });
+    }
+}
+
+const REGISTER_ERRORS: Record<string, string> = {
+    email: "Escribe un correo válido",
+    password: "La contraseña debe tener entre 8 y 72 caracteres",
+    name: "Escribe tu nombre (máximo 100 caracteres)",
+};
+
+function hasSession(req: Request): boolean {
+    return Boolean((req.cookies as Record<string, string | undefined>)[SESSION_COOKIE]);
+}
+
+function renderRegister(res: Response, status: number, values: { email?: unknown; name?: unknown }, errors?: string[]) {
+    res.status(status).render("register", {
+        title: "Crear cuenta",
+        googleEnabled: env.GOOGLE_ENABLED,
+        email: typeof values.email === "string" ? values.email : "",
+        name: typeof values.name === "string" ? values.name : "",
+        errors,
+    });
+}
+
+export function registerForm(req: Request, res: Response) {
+    if (hasSession(req)) {
+        res.redirect("/");
+        return;
+    }
+    renderRegister(res, 200, {});
+}
+
+export async function register(req: Request, res: Response) {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const input = registerBody.safeParse(body);
+    if (!input.success) {
+        const fields = new Set(input.error.issues.map((issue) => String(issue.path[0] ?? "")));
+        const errors = [...fields].map((field) => REGISTER_ERRORS[field] ?? "El formulario tiene campos no permitidos");
+        renderRegister(res, 400, body, errors);
+        return;
+    }
+
+    try {
+        const user = await createUser(input.data);
+        const { token, expiresIn } = signToken(user.id);
+        setSessionCookie(res, token, expiresIn);
+        res.redirect("/");
+    } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 409) throw err;
+        renderRegister(res, 409, body, ["Ese correo ya está registrado"]);
     }
 }
 

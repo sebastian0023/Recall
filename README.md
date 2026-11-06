@@ -2,18 +2,17 @@
 
 **Recall** es el REST API de una plataforma web que recibe audio de reuniones, clases y entrevistas, lo transcribe (Amazon Transcribe) y genera resúmenes con IA (Amazon Bedrock), sin depender de un dispositivo dedicado.
 
-## Alcance de la Entrega 2
+## Qué incluye
 
-- Persistencia real con PostgreSQL + Prisma: CRUD de users, recordings, transcriptions y summaries.
-- Conexión a la BD al arrancar (si falla, mensaje claro y el proceso termina).
-- Códigos HTTP correctos (200/201/204/400/404/409) y errores traducidos en un middleware central.
-- Validación de body, params y query con zod antes de llegar al controlador, con el error indicando qué campo falló.
-- Datos de prueba repetibles con `npm run seed`.
-- Colección de Postman en [docs/api.postman_collection.json](docs/api.postman_collection.json), con casos de error.
-- Vistas con Handlebars (layout con navegación, listado y detalle de grabaciones) con datos reales de la BD.
-- CI/CD con GitHub Actions: ESLint, typecheck/build, migraciones + seed + colección, SonarQube e imagen Docker.
+- **Persistencia:** PostgreSQL 17 + Prisma 7, con CRUD de users, recordings, transcriptions y summaries, y migraciones versionadas.
+- **Validación y errores:** zod valida body, params y query antes del controlador; un middleware central responde los errores en JSON con el status correcto.
+- **Autenticación propia:** registro y login con contraseña (bcrypt) y sesión con JWT (HS256). Login con Google opcional (OAuth 2.0 / OpenID Connect).
+- **Roles y permisos:** `USER` y `ADMIN`, con revisión del rol y del dueño de cada recurso (401 sin sesión, 403 sin permiso).
+- **Vistas con Handlebars:** registro, login, inicio, grabaciones, detalle y usuarios, con datos reales y la misma sesión.
+- **Datos de prueba** repetibles con `npm run seed` y **colección de Postman** con casos de error y de seguridad.
+- **CI/CD** con GitHub Actions: ESLint, build, migraciones + seed + colección, SonarQube e imagen Docker.
 
-El documento del proyecto (versión 2) está en la raíz: [documentacion.pdf](documentacion.pdf). Su fuente editable es [docs/documentacion.md](docs/documentacion.md): para regenerar el PDF, abre el archivo en VS Code con la extensión **Markdown PDF** (`yzane.markdown-pdf`, recomendada en `.vscode/extensions.json`), haz clic derecho → *Markdown PDF: Export (pdf)* y reemplaza `documentacion.pdf` en la raíz con el resultado. El encabezado y el pie de página ya están configurados en `.vscode/settings.json`.
+El documento del proyecto (versión 3) está en la raíz: [documentacion.pdf](documentacion.pdf). Su fuente editable es [docs/documentacion.md](docs/documentacion.md): para regenerar el PDF, abre el archivo en VS Code con la extensión **Markdown PDF** (`yzane.markdown-pdf`, recomendada en `.vscode/extensions.json`), haz clic derecho → *Markdown PDF: Export (pdf)* y reemplaza `documentacion.pdf` en la raíz con el resultado. El encabezado y el pie de página ya están configurados en `.vscode/settings.json`.
 
 ## Stack
 
@@ -52,7 +51,7 @@ npm run build && npm start
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
 5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
 6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar imprime `Connected to the database...`.
-7. Abre <http://localhost:3000> para ver las vistas, e importa la colección de Postman para probar el API.
+7. Abre <http://localhost:3000>: te lleva a `/login`. Entra con un usuario del seed (ver [Roles y permisos](#roles-y-permisos)) o crea una cuenta en `/register`. Para probar el API, importa la colección de Postman.
 
 Para desarrollo: `npm run dev` (recarga automática).
 
@@ -149,8 +148,6 @@ curl localhost:3000/api/v1/recordings -H "Authorization: Bearer $TOKEN"
 
 En las vistas, entra en <http://localhost:3000/login> con cualquiera de esos correos. La sesión se guarda en una cookie `httpOnly`.
 
-El detalle de esta entrega y sus evidencias están en [documentacion-entrega-2.pdf](documentacion-entrega-2.pdf) (fuente: [docs/documentacion-entrega-2.md](docs/documentacion-entrega-2.md)).
-
 ## Login con Google
 
 Flujo OAuth 2.0 / OpenID Connect (código de autorización) que usa la **misma sesión** que el login con contraseña: al terminar, el API guarda el mismo JWT en la cookie `recall_session`, así que los permisos son idénticos.
@@ -181,6 +178,8 @@ La ruta del callback se toma de `GOOGLE_CALLBACK_URL` (no está escrita en el c�
 - Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales.
 - Las peticiones usan el token de `{{adminToken}}`; la carpeta Permisos prueba 401 y 403 con `{{userToken}}`. Las dos variables se llenan solas: las peticiones de login de la carpeta Auth guardan el `accessToken` del admin (`adminToken`) y de Ana López (`userToken`), así que hay que correr la carpeta Auth antes que las demás (Run collection ya lo hace en orden).
 - Al menos una petición por endpoint, más los casos de error: cuerpo inválido, id inexistente, id mal formado, duplicado (409), JSON mal formado y ruta inexistente.
+- Casos de seguridad: registro con `role: "ADMIN"` (400), login sin contraseña (400), la misma respuesta para contraseña incorrecta y correo inexistente, la contraseña nunca aparece en las respuestas, sin token (401) y tokens alterados (401): `sub` cambiado, firma modificada, `alg: none` y firmado con otra clave. Los tokens alterados se generan en el *pre-request* a partir de un token real.
+- **Token expirado:** no se puede automatizar en la colección. Para probarlo, pon `JWT_EXPIRES_IN=5s` en el `.env`, reinicia el API, inicia sesión, espera 5 segundos y repite la petición: responde 401 `Token expired`.
 - La URL base es la variable de colección `{{baseUrl}}` (por defecto `http://localhost:3000`). Si cambias el puerto, cambia solo esa variable.
 - Las variables `userId`, `recordingId`, `transcriptionId` y `summaryId` apuntan a registros del seed; `newUserId`, `newRecordingId`, etc. se llenan solas al crear recursos.
 - Cada petición trae pruebas del status esperado. Para correr toda la colección en orden: **Run collection** en Postman, o desde la terminal:
@@ -199,6 +198,7 @@ Hechas con Handlebars ([express-handlebars](https://github.com/express-handlebar
 | `GET /recordings` | Listado de grabaciones con su usuario, estado, duración y número de resúmenes; filtro por estado (`?status=DONE`) |
 | `GET /recordings/:id` | Detalle: datos de la grabación, usuario, transcripción por hablante y resúmenes |
 | `GET /users` | Listado de usuarios con su número de grabaciones (solo administradores) |
+| `GET /register` · `POST /register` | Crear cuenta (nombre, correo y contraseña). Siempre crea un `USER`, inicia la sesión y redirige a `/`. Muestra errores por campo y 409 si el correo ya existe |
 | `GET /login` · `POST /login` · `POST /logout` | Inicio y cierre de sesión de las vistas (con botón de Google si está configurado) |
 | `GET /auth/google` · `GET /google_confirm` | Inicio y callback del login con Google |
 
@@ -229,13 +229,13 @@ recall-api/
 ├── docs/
 │   ├── api.postman_collection.json
 │   ├── documentacion.md      # fuente editable del documento (Markdown PDF)
-│   └── img/                  # logo y diagramas del documento
+│   └── img/                  # logo, diagramas y evidencias del documento
 ├── prisma/
 │   ├── schema.prisma         # esquema de la base de datos
 │   ├── migrations/           # migraciones versionadas
 │   └── seed.ts               # datos de prueba (npm run seed)
 ├── public/                   # CSS de las vistas
-├── views/                    # plantillas Handlebars (layouts/, recordings/, users/)
+├── views/                    # plantillas Handlebars (layouts/, recordings/, users/, login, register)
 ├── src/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
@@ -250,7 +250,7 @@ recall-api/
 ├── Dockerfile
 ├── eslint.config.js
 ├── sonar-project.properties
-├── documentacion.pdf         # documento del proyecto (versión 2)
+├── documentacion.pdf         # documento del proyecto (versión 3)
 ├── prisma.config.ts
 ├── .env.example
 └── package.json
@@ -291,7 +291,7 @@ Prefijo `/api/v1` (excepto `/health`).
 | Auth | `POST /auth/register` | 201 usuario creado (rol `USER`); 409 si el correo ya existe; 400 si falta un campo, la contraseña mide menos de 8 o se envía `role` |
 | Auth | `POST /auth/login` | 200 `{ accessToken, tokenType, expiresIn, user }`; 401 `Incorrect email or password` (mismo mensaje si el correo no existe o la contraseña es incorrecta) |
 | Auth | `GET /auth/me` | 200 usuario autenticado (401 sin sesión) |
-| Users | `GET /users` | 200 lista |
+| Users | `GET /users` | 200 lista (solo `ADMIN`) |
 | Users | `GET /users/:id` | 200 usuario con sus grabaciones; 404; 400 |
 | Users | `PATCH /users/:id` | 200; 404; 409 si el correo ya existe |
 | Users | `DELETE /users/:id` | 204; 404; 409 si tiene grabaciones |
@@ -354,4 +354,4 @@ Formato de respuesta:
 ## Integrantes
 
 - **Daniel Sebastián Macías Macías:** conexión, modelos, CRUD, validaciones, manejo de errores y autenticación
-- **Emilio Daniel Guzmán Seda:** seed, vistas con Handlebars, colección de Postman y CI/CD
+- **Emilio Daniel Guzmán Seda:** seed, vistas con Handlebars (incluido el registro), roles y permisos, colección de Postman y casos de seguridad, CI/CD y documento

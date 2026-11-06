@@ -192,6 +192,55 @@
           }
         },
         {
+          "name": "Registrar - intenta asignarse role ADMIN (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Error en formato { error: { message } }\", () => pm.expect(pm.response.json().error.message).to.be.a(\"string\"));",
+                  "pm.test(\"Rechaza el campo role\", () => pm.expect(pm.response.json().error.details.map((d) => d.field)).to.include(\"role\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"intruso.{{$timestamp}}@recall.app\",\n  \"password\": \"Recall2026!\",\n  \"name\": \"Intruso\",\n  \"role\": \"ADMIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Login (admin, guarda adminToken)",
           "event": [
             {
@@ -251,6 +300,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));",
                   "pm.test(\"Rol USER\", () => pm.expect(pm.response.json().data.user.role).to.eql(\"USER\"));",
                   "pm.collectionVariables.set(\"userToken\", pm.response.json().data.accessToken);"
                 ]
@@ -300,7 +350,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));"
+                  "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));",
+                  "pm.collectionVariables.set(\"loginErrorBody\", pm.response.text());"
                 ]
               }
             }
@@ -348,7 +399,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
-                  "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));"
+                  "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));",
+                  "pm.test(\"Misma respuesta que con contraseña incorrecta (no revela si el correo existe)\", () => pm.expect(pm.response.text()).to.eql(pm.collectionVariables.get(\"loginErrorBody\")));"
                 ]
               }
             }
@@ -388,6 +440,54 @@
           }
         },
         {
+          "name": "Login - sin contraseña (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Indica que falta password\", () => pm.expect(pm.response.json().error.details.map((d) => d.field)).to.include(\"password\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"sebastian@recall.app\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "Usuario autenticado (me)",
           "event": [
             {
@@ -395,7 +495,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));"
                 ]
               }
             }
@@ -432,7 +533,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"data es un arreglo\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                  "pm.test(\"data es un arreglo\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));"
                 ]
               }
             }
@@ -462,7 +564,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Incluye sus grabaciones\", () => pm.expect(pm.response.json().data.recordings).to.be.an(\"array\"));"
+                  "pm.test(\"Incluye sus grabaciones\", () => pm.expect(pm.response.json().data.recordings).to.be.an(\"array\"));",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));"
                 ]
               }
             }
@@ -2469,7 +2572,7 @@
     },
     {
       "name": "Permisos",
-      "description": "Casos de la matriz de permisos: {{userToken}} es Ana López (USER) y {{adminToken}} es Sebastián Macías (ADMIN). Los recursos de {{recordingId}}, {{transcriptionId}} y {{summaryId}} son del admin.",
+      "description": "Casos 401 y 403. {{userToken}} es Ana López (USER) y {{adminToken}} es Sebastián Macías (ADMIN); los guarda la carpeta Auth. Los tokens alterados se generan en el pre-request a partir de un token real. El token expirado no se puede automatizar aquí: se prueba a mano con JWT_EXPIRES_IN=5s (ver README).",
       "item": [
         {
           "name": "Sin token (401)",
@@ -2539,6 +2642,336 @@
                   "type": "string"
                 }
               ]
+            }
+          }
+        },
+        {
+          "name": "Token alterado: cambia el sub al del admin (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"tamperedToken\", \"\");",
+                  "const cryptoJs = require(\"crypto-js\");",
+                  "const b64url = (text) => cryptoJs.enc.Base64.stringify(cryptoJs.enc.Utf8.parse(text)).replace(/=+$/, \"\").replace(/\\+/g, \"-\").replace(/\\//g, \"_\");",
+                  "const fromB64url = (part) => { const s = part.replace(/-/g, \"+\").replace(/_/g, \"/\"); return cryptoJs.enc.Base64.parse(s + \"===\".slice((s.length + 3) % 4)).toString(cryptoJs.enc.Utf8); };",
+                  "const [header, payload, signature] = pm.collectionVariables.get(\"userToken\").split(\".\");",
+                  "const claims = JSON.parse(fromB64url(payload));",
+                  "claims.sub = pm.collectionVariables.get(\"userId\");",
+                  "pm.collectionVariables.set(\"tamperedToken\", [header, b64url(JSON.stringify(claims)), signature].join(\".\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensaje Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tamperedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token alterado: firma modificada (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"tamperedToken\", \"\");",
+                  "const token = pm.collectionVariables.get(\"adminToken\");",
+                  "const last = token.slice(-1) === \"A\" ? \"B\" : \"A\";",
+                  "pm.collectionVariables.set(\"tamperedToken\", token.slice(0, -1) + last);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensaje Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recordings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recordings"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tamperedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token sin firma, alg none (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"tamperedToken\", \"\");",
+                  "const cryptoJs = require(\"crypto-js\");",
+                  "const b64url = (text) => cryptoJs.enc.Base64.stringify(cryptoJs.enc.Utf8.parse(text)).replace(/=+$/, \"\").replace(/\\+/g, \"-\").replace(/\\//g, \"_\");",
+                  "const fromB64url = (part) => { const s = part.replace(/-/g, \"+\").replace(/_/g, \"/\"); return cryptoJs.enc.Base64.parse(s + \"===\".slice((s.length + 3) % 4)).toString(cryptoJs.enc.Utf8); };",
+                  "const claims = { sub: pm.collectionVariables.get(\"userId\"), iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 };",
+                  "pm.collectionVariables.set(\"tamperedToken\", b64url(JSON.stringify({ alg: \"none\", typ: \"JWT\" })) + \".\" + b64url(JSON.stringify(claims)) + \".\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensaje Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tamperedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Token firmado con otra clave (401)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"tamperedToken\", \"\");",
+                  "const cryptoJs = require(\"crypto-js\");",
+                  "const b64url = (text) => cryptoJs.enc.Base64.stringify(cryptoJs.enc.Utf8.parse(text)).replace(/=+$/, \"\").replace(/\\+/g, \"-\").replace(/\\//g, \"_\");",
+                  "const fromB64url = (part) => { const s = part.replace(/-/g, \"+\").replace(/_/g, \"/\"); return cryptoJs.enc.Base64.parse(s + \"===\".slice((s.length + 3) % 4)).toString(cryptoJs.enc.Utf8); };",
+                  "const claims = { sub: pm.collectionVariables.get(\"userId\"), iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 };",
+                  "const unsigned = b64url(JSON.stringify({ alg: \"HS256\", typ: \"JWT\" })) + \".\" + b64url(JSON.stringify(claims));",
+                  "const signature = cryptoJs.enc.Base64.stringify(cryptoJs.HmacSHA256(unsigned, \"clave-de-un-atacante-que-no-es-la-del-servidor\")).replace(/=+$/, \"\").replace(/\\+/g, \"-\").replace(/\\//g, \"_\");",
+                  "pm.collectionVariables.set(\"tamperedToken\", unsigned + \".\" + signature);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensaje Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tamperedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sin token - su perfil (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Sin token - crear grabación (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recordings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recordings"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Sin sesión\",\n  \"s3Key\": \"audio/postman/sin-sesion.mp3\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Sin token - eliminar usuario (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
             }
           }
         },
@@ -3466,6 +3899,14 @@
     },
     {
       "key": "newSummaryId",
+      "value": ""
+    },
+    {
+      "key": "tamperedToken",
+      "value": ""
+    },
+    {
+      "key": "loginErrorBody",
       "value": ""
     }
   ],
