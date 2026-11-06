@@ -435,7 +435,17 @@ Corrieron las 95 peticiones con newman: 163 aserciones y ninguna falla. La image
 
 <p class="caption">Evidencia 7 · El administrador abre una grabación de Ana López</p>
 
-<p class="nota"><strong>Login con Google:</strong> requiere las credenciales OAuth del proyecto, que no se suben al repositorio. Se prueba en local con <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> y <code>GOOGLE_CALLBACK_URL</code> en el <code>.env</code> (ver README).</p>
+### Login con Google
+
+<div class="pair"><img class="evidence" src="img/evidencias/vista-google-login.png" alt="Login con el botón de Google"><img class="evidence" src="img/evidencias/vista-google-cuentas.png" alt="Selección de cuenta de Google"></div>
+
+<p class="caption">Evidencia 8 · El botón «Continuar con Google» en <code>/login</code> redirige a Google, que pide elegir la cuenta</p>
+
+![Sesión abierta con Google](img/evidencias/vista-google-sesion.png)
+
+<p class="caption">Evidencia 9 · Al volver del callback la sesión queda abierta con el rol Usuario (<code>USER</code>), el rol por defecto: nunca viene de Google</p>
+
+<p class="nota"><strong>Credenciales:</strong> el login con Google requiere las credenciales OAuth del proyecto, que no se suben al repositorio. Se prueba en local con <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> y <code>GOOGLE_CALLBACK_URL</code> en el <code>.env</code> (ver README).</p>
 
 ## Requisitos del curso
 
