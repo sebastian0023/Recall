@@ -10,6 +10,7 @@
 - **Roles y permisos:** `USER` y `ADMIN`, con revisión del rol y del dueño de cada recurso (401 sin sesión, 403 sin permiso).
 - **Vistas con Handlebars:** registro, login, inicio, grabaciones, detalle y usuarios, con datos reales y la misma sesión.
 - **Datos de prueba** repetibles con `npm run seed` y **colección de Postman** con casos de error y de seguridad.
+- **Documentación interactiva** con Swagger (OpenAPI 3) en [`/docs`](http://localhost:3000/docs). Ver [Documentación del API](#documentación-del-api-swagger).
 - **Logs** con pino: una línea por petición con su id (`X-Request-Id`), errores con stack y sin contraseñas ni tokens. Ver [Logs](#logs).
 - **CI/CD** con GitHub Actions: ESLint, build, migraciones + seed + colección, SonarQube e imagen Docker.
 
@@ -27,6 +28,7 @@ El documento del proyecto (versión 3) está en la raíz: [documentacion.pdf](do
 | ORM | Prisma 7 |
 | Autenticación | bcryptjs (contraseñas) + jsonwebtoken (JWT HS256) |
 | Logging | pino + pino-http (pino-pretty en desarrollo) |
+| Documentación del API | OpenAPI 3 con swagger-jsdoc + swagger-ui-express |
 | Vistas | Handlebars (express-handlebars) |
 | Linter | ESLint + typescript-eslint |
 | Gestor de paquetes | npm |
@@ -53,7 +55,7 @@ npm run build && npm start
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
 5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
 6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar escribe en el log `Connected to the database. Recall API listening`.
-7. Abre <http://localhost:3000>: te lleva a `/login`. Entra con un usuario del seed (ver [Roles y permisos](#roles-y-permisos)) o crea una cuenta en `/register`. Para probar el API, importa la colección de Postman.
+7. Abre <http://localhost:3000>: te lleva a `/login`. Entra con un usuario del seed (ver [Roles y permisos](#roles-y-permisos)) o crea una cuenta en `/register`. Para probar el API, abre la documentación interactiva en <http://localhost:3000/docs> o importa la colección de Postman.
 
 Para desarrollo: `npm run dev` (recarga automática). Cada petición escribe una línea en la terminal (ver [Logs](#logs)).
 
@@ -175,6 +177,23 @@ La ruta del callback se toma de `GOOGLE_CALLBACK_URL` (no está escrita en el c�
 - **Errores:** si el usuario cancela, el `state` no coincide, el correo no está verificado o Google rechaza el código, se vuelve a `/login` con un mensaje claro.
 - Un usuario creado con Google no tiene contraseña, así que `POST /auth/login` le responde 401.
 
+## Documentación del API (Swagger)
+
+Con el API corriendo:
+
+- **<http://localhost:3000/docs>**: documentación interactiva (Swagger UI). Es pública.
+- **<http://localhost:3000/docs/openapi.json>**: la especificación OpenAPI 3 en JSON (sirve para importarla en Postman u otras herramientas).
+
+**Probar rutas protegidas desde `/docs`.** Haz login en `POST /auth/login` con un usuario del seed, copia `data.accessToken`, haz clic en **Authorize** y pégalo (sin escribir `Bearer`). Swagger UI recuerda el token aunque recargues la página. Después, **Try it out** en cualquier ruta protegida.
+
+**Cómo está armada.** La especificación se genera al arrancar con `swagger-jsdoc`:
+
+- [src/docs/swagger.ts](src/docs/swagger.ts): la configuración general (`info`, `servers`, `tags` por módulo, `securitySchemes.bearerAuth`) y las rutas `/docs` y `/docs/openapi.json`.
+- [src/docs/schemas.ts](src/docs/schemas.ts): los modelos (`User`, `Session`, `Recording`, `Transcription`, `Summary`, enums) y el formato de error (`Error`), definidos una sola vez en `components/schemas`, y las respuestas de error comunes (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`) en `components/responses`. Los endpoints los reutilizan con `$ref`. `User` nunca incluye la contraseña.
+- Cada endpoint se documenta con un comentario `/** @openapi ... */` junto a su ruta, en el archivo de rutas de su módulo ([src/routes/](src/routes/)). Así, quien cambia una ruta ve su documentación. Las rutas protegidas declaran `security: [{ bearerAuth: [] }]`; las públicas, `security: []`.
+
+`swagger-jsdoc` busca los comentarios en `src/routes/*.ts` con `npm run dev` y en `dist/routes/*.js` después de `npm run build` (el `tsconfig.json` no usa `removeComments`). Con `failOnErrors`, un comentario con YAML inválido detiene el arranque en lugar de desaparecer de `/docs`. El CI valida la especificación con [Redocly CLI](https://redocly.com/docs/cli/) en cada push.
+
 ## Logs
 
 El API usa **[pino](https://getpino.io)**. Hay un solo logger, configurado en [src/lib/logger.ts](src/lib/logger.ts) y reutilizado en todo el proyecto; en `src/` no hay `console.log` (ESLint lo marca como error con `no-console`; el seed sí puede usarlo).
@@ -271,6 +290,7 @@ recall-api/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
+│   ├── docs/                 # swagger.ts (configuración OpenAPI y /docs) y schemas.ts (esquemas compartidos)
 │   ├── lib/                  # prisma, password (bcrypt), token (JWT), permissions, ApiError, logger (pino)
 │   ├── middlewares/          # auth, validate, errorHandler, notFound, requestLogger
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
