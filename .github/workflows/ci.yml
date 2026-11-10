@@ -123,6 +123,14 @@ jobs:
           curl -s http://localhost:3000/api/v1/no-existe | grep -q '"requestId"'
           grep -q 'ci-check-123' server.log
 
+      - name: Documentación del API (Swagger)
+        run: |
+          curl -sf http://localhost:3000/docs/ | grep -q "swagger-ui"
+          curl -sf -o /dev/null http://localhost:3000/docs/swagger-ui.css
+          curl -sf http://localhost:3000/docs/openapi.json -o openapi.json
+          node -e 'const s = require("./openapi.json"); if (!s.paths["/health"]) { console.error("La especificación no tiene /health: swagger-jsdoc no encontró los comentarios @openapi"); process.exit(1); }'
+          npx --yes @redocly/cli@2.65.0 lint openapi.json --format=stylish
+
       - name: El log no contiene contraseñas ni tokens
         run: |
           if grep -E 'Recall2026!|eyJhbGci' server.log; then
