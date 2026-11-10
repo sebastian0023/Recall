@@ -10,6 +10,7 @@
 - **Roles y permisos:** `USER` y `ADMIN`, con revisión del rol y del dueño de cada recurso (401 sin sesión, 403 sin permiso).
 - **Vistas con Handlebars:** registro, login, inicio, grabaciones, detalle y usuarios, con datos reales y la misma sesión.
 - **Datos de prueba** repetibles con `npm run seed` y **colección de Postman** con casos de error y de seguridad.
+- **Logs** con pino: una línea por petición con su id (`X-Request-Id`), errores con stack y sin contraseñas ni tokens. Ver [Logs](#logs).
 - **CI/CD** con GitHub Actions: ESLint, build, migraciones + seed + colección, SonarQube e imagen Docker.
 
 El documento del proyecto (versión 3) está en la raíz: [documentacion.pdf](documentacion.pdf). Su fuente editable es [docs/documentacion.md](docs/documentacion.md): para regenerar el PDF, abre el archivo en VS Code con la extensión **Markdown PDF** (`yzane.markdown-pdf`, recomendada en `.vscode/extensions.json`), haz clic derecho → *Markdown PDF: Export (pdf)* y reemplaza `documentacion.pdf` en la raíz con el resultado. El encabezado y el pie de página ya están configurados en `.vscode/settings.json`.
@@ -25,6 +26,7 @@ El documento del proyecto (versión 3) está en la raíz: [documentacion.pdf](do
 | Base de datos | PostgreSQL 17 (Docker Compose) |
 | ORM | Prisma 7 |
 | Autenticación | bcryptjs (contraseñas) + jsonwebtoken (JWT HS256) |
+| Logging | pino + pino-http (pino-pretty en desarrollo) |
 | Vistas | Handlebars (express-handlebars) |
 | Linter | ESLint + typescript-eslint |
 | Gestor de paquetes | npm |
@@ -50,10 +52,10 @@ npm run build && npm start
 3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`). Espera unos segundos a que acepte conexiones antes del siguiente paso.
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
 5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
-6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar imprime `Connected to the database...`.
+6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar escribe en el log `Connected to the database. Recall API listening`.
 7. Abre <http://localhost:3000>: te lleva a `/login`. Entra con un usuario del seed (ver [Roles y permisos](#roles-y-permisos)) o crea una cuenta en `/register`. Para probar el API, importa la colección de Postman.
 
-Para desarrollo: `npm run dev` (recarga automática).
+Para desarrollo: `npm run dev` (recarga automática). Cada petición escribe una línea en la terminal (ver [Logs](#logs)).
 
 Si prefieres una base en la nube (Supabase, Neon, etc.), cambia `DATABASE_URL` en tu `.env` y omite `docker compose up -d`.
 
@@ -73,6 +75,8 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | Variable | Descripción |
 | --- | --- |
 | `PORT` | Puerto del API (3000) |
+| `NODE_ENV` | `development` (por defecto) o `production`. En producción los logs salen en JSON |
+| `LOG_LEVEL` | Nivel mínimo del log: `fatal`, `error`, `warn`, `info` (por defecto), `debug`, `trace` o `silent`. Ver [Logs](#logs) |
 | `DATABASE_URL` | Cadena de conexión a PostgreSQL (obligatoria) |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
 | `JWT_SECRET` | Secreto con el que se firman los JWT (obligatorio, mínimo 32 caracteres). El valor de `.env.example` es solo de desarrollo y se rechaza con `NODE_ENV=production`. Para generar uno: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
@@ -171,6 +175,33 @@ La ruta del callback se toma de `GOOGLE_CALLBACK_URL` (no está escrita en el c�
 - **Errores:** si el usuario cancela, el `state` no coincide, el correo no está verificado o Google rechaza el código, se vuelve a `/login` con un mensaje claro.
 - Un usuario creado con Google no tiene contraseña, así que `POST /auth/login` le responde 401.
 
+## Logs
+
+El API usa **[pino](https://getpino.io)**. Hay un solo logger, configurado en [src/lib/logger.ts](src/lib/logger.ts) y reutilizado en todo el proyecto; en `src/` no hay `console.log` (ESLint lo marca como error con `no-console`; el seed sí puede usarlo).
+
+**Qué se registra**
+
+- **Una línea por petición** ([src/middlewares/requestLogger.ts](src/middlewares/requestLogger.ts), con `pino-http`): método, ruta, código de respuesta y duración en ms (`responseTime`). Por ejemplo `GET /api/v1/recordings 200 12ms`.
+- **Id de petición:** se toma del encabezado `X-Request-Id` si viene (hasta 128 caracteres: letras, números, `_`, `.`, `:` o `-`) o se genera con `crypto.randomUUID()`. Aparece como `reqId` en todas las líneas de esa petición, se regresa en el encabezado `X-Request-Id` de la respuesta y en el campo `requestId` de los errores (`{ "error": { "message", "details?", "requestId" } }`). Así un error que reporta un usuario se encuentra en el log.
+- **Errores:** el middleware de errores escribe los errores inesperados (500) con su stack y su `reqId`. La respuesta nunca incluye el stack.
+- **Eventos:** arranque del servidor, registro de usuarios (con contraseña o con Google), logins fallidos y la falta de conexión a la base de datos al arrancar.
+
+**Niveles**
+
+| Nivel | Cuándo |
+| --- | --- |
+| `fatal` | El API no puede arrancar (sin conexión a la base de datos) |
+| `error` | Fallas: respuestas 5xx y errores inesperados, con stack |
+| `warn` | Lo sospechoso o recuperable: respuestas 4xx, login fallido, login con Google rechazado |
+| `info` | Eventos importantes: arranque, usuario registrado, cada petición 2xx/3xx |
+| `debug` | Detalle de desarrollo: por qué se rechazó una petición (detalles de validación, error de Prisma traducido) |
+
+El nivel se cambia con `LOG_LEVEL` en el `.env` (por defecto `info`); por ejemplo `LOG_LEVEL=debug npm run dev` muestra también el detalle de cada 4xx.
+
+**Formato.** Con `NODE_ENV=production` cada evento es una línea JSON (`{"level":"info","time":"...","reqId":"...","msg":"GET /health 200 1ms",...}`), lista para un servicio de logs. En desarrollo sale en formato legible con `pino-pretty`, una línea por evento.
+
+**Qué nunca se registra.** El logger tiene `redact` configurado: los campos `password`, `passwordHash`, `token`, `accessToken`, `authorization` y `cookie` (y los encabezados `Authorization`, `Cookie` y `Set-Cookie`) se escriben como `[Redacted]`. Además, la línea de cada petición no incluye encabezados ni body, y en la URL se ocultan los valores de `token`, `code` y `state` (`/verify-email?token=[Redacted]`). El CI corre la colección completa y revisa que el log no contenga la contraseña del seed ni ningún JWT.
+
 ## Colección de peticiones
 
 [docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
@@ -240,8 +271,8 @@ recall-api/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
-│   ├── lib/                  # prisma, password (bcrypt), token (JWT), permissions, ApiError
-│   ├── middlewares/          # auth, validate, errorHandler, notFound
+│   ├── lib/                  # prisma, password (bcrypt), token (JWT), permissions, ApiError, logger (pino)
+│   ├── middlewares/          # auth, validate, errorHandler, notFound, requestLogger
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
 │   ├── models/               # tipos TypeScript por entidad
 │   ├── controllers/          # lógica de cada endpoint (consultas con Prisma) + vistas
@@ -335,12 +366,13 @@ Formato de respuesta:
     "details": [
       { "field": "email", "message": "Must be a valid email" },
       { "field": "durationSec", "message": "Must be 0 or more" }
-    ]
+    ],
+    "requestId": "3b9ca8e6-9c30-46e5-a12c-a4ebddb0e9d3"
   }
 }
 ```
 
-**Errores.** Todos pasan por el middleware central [src/middlewares/errorHandler.ts](src/middlewares/errorHandler.ts) y responden `{ "error": { "message": "…" } }` (con `details` solo en validación). Nunca incluyen stack trace ni códigos de la BD: ese detalle se imprime solo en la consola del servidor.
+**Errores.** Todos pasan por el middleware central [src/middlewares/errorHandler.ts](src/middlewares/errorHandler.ts) y responden `{ "error": { "message": "…", "requestId": "…" } }` (con `details` solo en validación). `requestId` es el mismo del encabezado `X-Request-Id` y del log de esa petición. Nunca incluyen stack trace ni códigos de la BD: ese detalle solo se escribe en el log (ver [Logs](#logs)).
 
 | Situación | Status |
 | --- | --- |

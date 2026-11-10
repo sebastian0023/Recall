@@ -1,5 +1,6 @@
 import app from "./app.js";
 import { env } from "./config/env.js";
+import { logger } from "./lib/logger.js";
 import { prisma } from "./lib/prisma.js";
 
 async function main() {
@@ -7,13 +8,15 @@ async function main() {
     await prisma.$connect();
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
-    console.error("Could not connect to the database. Check DATABASE_URL in your .env and that PostgreSQL is running (docker compose up -d).");
-    console.error(err instanceof Error ? err.message : err);
+    logger.fatal(
+      { err },
+      "Could not connect to the database. Check DATABASE_URL in your .env and that PostgreSQL is running (docker compose up -d).",
+    );
     process.exit(1);
   }
 
   app.listen(env.PORT, () => {
-    console.log(`Connected to the database. Recall API listening on port ${env.PORT}`);
+    logger.info({ port: env.PORT, env: env.NODE_ENV, logLevel: env.LOG_LEVEL }, "Connected to the database. Recall API listening");
   });
 }
 

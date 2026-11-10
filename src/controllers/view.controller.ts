@@ -40,7 +40,7 @@ export async function login(req: Request, res: Response) {
     }
 
     try {
-        const session = await authenticate(input.data.email, input.data.password);
+        const session = await authenticate(input.data.email, input.data.password, req.log);
         setSessionCookie(res, session.accessToken, session.expiresIn);
         res.redirect("/");
     } catch (err) {
@@ -88,7 +88,7 @@ export async function register(req: Request, res: Response) {
     }
 
     try {
-        const user = await createUser(input.data);
+        const user = await createUser(input.data, req.log);
         const { token, expiresIn } = signToken(user.id);
         setSessionCookie(res, token, expiresIn);
         res.redirect("/");
@@ -176,9 +176,9 @@ export function viewNotFound(_req: Request, _res: Response, next: NextFunction) 
     next(new ApiError(404, "La página no existe"));
 }
 
-export function viewErrorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+export function viewErrorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
     const status = err instanceof ApiError ? err.status : 500;
-    if (status === 500) console.error(err);
+    if (status >= 500) req.log.error({ err }, "View error");
 
     res.status(status).render("error", {
         title: `Error ${status}`,

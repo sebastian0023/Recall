@@ -49,15 +49,18 @@ export async function googleCallback(req: Request, res: Response) {
 
         // Si ya hay un usuario con ese correo (registrado con contraseña o de una visita anterior) se reutiliza;
         // si no, se crea sin contraseña y con el rol por defecto (USER). El rol nunca viene de Google
-        const user =
-            (await prisma.user.findFirst({ where: { email: { equals: profile.email, mode: "insensitive" } } })) ??
-            (await prisma.user.create({ data: { email: profile.email, name: profile.name } }));
+        let user = await prisma.user.findFirst({ where: { email: { equals: profile.email, mode: "insensitive" } } });
+        if (!user) {
+            user = await prisma.user.create({ data: { email: profile.email, name: profile.name } });
+            req.log.info({ userId: user.id }, "User registered with Google");
+        }
 
         const { token, expiresIn } = signToken(user.id);
         setSessionCookie(res, token, expiresIn);
         res.redirect("/");
     } catch (err) {
         if (!(err instanceof ApiError)) throw err;
+        req.log.warn({ reason: err.message }, "Google login failed");
         fail(res, err.status === 403 ? "google_unverified" : "google_failed");
     }
 }
