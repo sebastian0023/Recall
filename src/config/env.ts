@@ -35,9 +35,18 @@ if (GOOGLE_CALLBACK_URL) {
   }
 }
 
+// Nivel mínimo que se escribe en el log (de más a menos grave): fatal, error, warn, info, debug, trace o silent
+const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
+type LogLevel = (typeof LOG_LEVELS)[number];
+const LOG_LEVEL = (process.env.LOG_LEVEL || "info").toLowerCase();
+if (!LOG_LEVELS.includes(LOG_LEVEL as LogLevel)) {
+  throw new Error(`LOG_LEVEL is invalid ("${LOG_LEVEL}"); use one of: ${LOG_LEVELS.join(", ")}`);
+}
+
 export const env = {
   PORT: Number(process.env.PORT) || 3000,
   NODE_ENV,
+  LOG_LEVEL: LOG_LEVEL as LogLevel,
   DATABASE_URL: required("DATABASE_URL"),
   JWT_SECRET,
   JWT_EXPIRES_IN,

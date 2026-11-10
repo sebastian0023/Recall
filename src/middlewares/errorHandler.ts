@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { ApiError } from "../lib/apiError.js";
+import { ApiError, type ErrorDetail } from "../lib/apiError.js";
 
 // Códigos de error de Prisma traducidos a status HTTP; la respuesta nunca expone el código de la BD
 const PRISMA_ERRORS: Record<string, [number, string]> = {
@@ -19,41 +19,52 @@ function errorField(err: unknown, key: "code" | "type"): string | undefined {
     return typeof value === "string" ? value : undefined;
 }
 
+// Todas las respuestas de error tienen el formato { error: { message, details?, requestId } }.
+// requestId es el mismo del encabezado X-Request-Id y de las líneas del log de esa petición
+function sendError(req: Request, res: Response, status: number, message: string, details?: ErrorDetail[]) {
+    res.status(status).json({
+        error: { message, ...(details && { details }), requestId: String(req.id) },
+    });
+}
+
 // Debe tener 4 parámetros para que Express lo reconozca como manejador de errores.
-// Todas las respuestas de error salen de aquí con el formato { error: { message, details? } }
-export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
+// Los errores esperados (4xx) ya quedan en la línea de la petición como warn; su detalle va en debug.
+// Los inesperados se escriben como error con el stack. La respuesta nunca incluye el stack
+export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
     if (err instanceof ApiError) {
-        res.status(err.status).json({
-            error: { message: err.message, ...(err.details && { details: err.details }) },
-        });
+        if (err.status >= 500) req.log.error({ err }, err.message);
+        else req.log.debug({ status: err.status, message: err.message, details: err.details }, "Request rejected");
+        sendError(req, res, err.status, err.message, err.details);
         return;
     }
 
     const code = errorField(err, "code");
     const mapped = code ? PRISMA_ERRORS[code] : undefined;
     if (mapped) {
-        res.status(mapped[0]).json({ error: { message: mapped[1] } });
+        req.log.debug({ prismaCode: code, status: mapped[0] }, mapped[1]);
+        sendError(req, res, mapped[0], mapped[1]);
         return;
     }
 
-    // Prisma rechazó los datos antes de llegar a la BD (campo faltante o de tipo incorrecto)
+    // Prisma rechazó los datos antes de llegar a la BD (campo faltante o de tipo incorrecto): indica un bug
     if (err instanceof Error && err.name === "PrismaClientValidationError") {
-        console.error(err);
-        res.status(400).json({ error: { message: "Invalid request data" } });
+        req.log.error({ err }, "Prisma rejected the query data");
+        sendError(req, res, 400, "Invalid request data");
         return;
     }
 
     // Errores de express.json: JSON mal formado o body demasiado grande
     if (err instanceof SyntaxError && "body" in err) {
-        res.status(400).json({ error: { message: "Invalid JSON body" } });
+        req.log.debug("Invalid JSON body");
+        sendError(req, res, 400, "Invalid JSON body");
         return;
     }
     if (errorField(err, "type") === "entity.too.large") {
-        res.status(413).json({ error: { message: "Request body too large" } });
+        req.log.debug("Request body too large");
+        sendError(req, res, 413, "Request body too large");
         return;
     }
 
-    // El detalle (stack incluido) solo se escribe en la consola del servidor
-    console.error(err);
-    res.status(500).json({ error: { message: "Internal server error" } });
+    req.log.error({ err }, "Unhandled error");
+    sendError(req, res, 500, "Internal server error");
 }

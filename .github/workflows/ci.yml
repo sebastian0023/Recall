@@ -116,6 +116,20 @@ jobs:
           curl -sf -b session.txt http://localhost:3000/recordings | grep -q "Clase de Bases de Datos"
           curl -sf -b session.txt http://localhost:3000/recordings/22222222-2222-4222-8222-000000000001 | grep -q "Transcripción"
 
+      - name: Id de petición (X-Request-Id)
+        run: |
+          curl -si http://localhost:3000/health | grep -iq '^x-request-id: [0-9a-f-]\{36\}'
+          curl -si -H "X-Request-Id: ci-check-123" http://localhost:3000/health | grep -iq '^x-request-id: ci-check-123'
+          curl -s http://localhost:3000/api/v1/no-existe | grep -q '"requestId"'
+          grep -q 'ci-check-123' server.log
+
+      - name: El log no contiene contraseñas ni tokens
+        run: |
+          if grep -E 'Recall2026!|eyJhbGci' server.log; then
+            echo "El log contiene la contraseña del seed o un JWT"
+            exit 1
+          fi
+
       - name: Logs del servidor
         if: always()
         run: cat server.log || true

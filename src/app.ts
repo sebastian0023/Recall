@@ -5,6 +5,7 @@ import path from "node:path";
 import { hbsEngine } from "./lib/handlebars.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { notFound } from "./middlewares/notFound.js";
+import { requestLogger } from "./middlewares/requestLogger.js";
 import routes from "./routes/index.js";
 import viewRoutes from "./routes/view.routes.js";
 
@@ -16,7 +17,9 @@ app.engine(".hbs", hbsEngine);
 app.set("view engine", ".hbs");
 app.set("views", path.join(root, "views"));
 
-app.use(cors());
+// Primero, para que cada petición (incluidos los errores y los 404) tenga su línea de log y su X-Request-Id
+app.use(requestLogger);
+app.use(cors({ exposedHeaders: ["X-Request-Id"] }));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(root, "public")));

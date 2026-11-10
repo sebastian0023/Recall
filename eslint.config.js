@@ -34,7 +34,13 @@ export default tseslint.config(
       ],
       "@typescript-eslint/consistent-type-imports": "error",
       eqeqeq: ["error", "always"],
-      "no-console": "off",
+      // En src/ todo pasa por el logger (src/lib/logger.ts)
+      "no-console": "error",
     },
+  },
+  {
+    // Los scripts (seed) sí pueden escribir en la consola
+    files: ["prisma/**"],
+    rules: { "no-console": "off" },
   },
 );

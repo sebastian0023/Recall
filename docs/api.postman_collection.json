@@ -351,7 +351,9 @@
                 "exec": [
                   "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
                   "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));",
-                  "pm.collectionVariables.set(\"loginErrorBody\", pm.response.text());"
+                  "// requestId cambia en cada petición; se guarda el resto del body para compararlo",
+                  "const { requestId: _id, ...loginError } = pm.response.json().error;",
+                  "pm.collectionVariables.set(\"loginErrorBody\", JSON.stringify({ error: loginError }));"
                 ]
               }
             }
@@ -400,7 +402,8 @@
                 "exec": [
                   "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
                   "pm.test(\"Mensaje genérico\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));",
-                  "pm.test(\"Misma respuesta que con contraseña incorrecta (no revela si el correo existe)\", () => pm.expect(pm.response.text()).to.eql(pm.collectionVariables.get(\"loginErrorBody\")));"
+                  "const { requestId: _id, ...loginError } = pm.response.json().error;",
+                  "pm.test(\"Misma respuesta que con contraseña incorrecta (no revela si el correo existe)\", () => pm.expect(JSON.stringify({ error: loginError })).to.eql(pm.collectionVariables.get(\"loginErrorBody\")));"
                 ]
               }
             }
