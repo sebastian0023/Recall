@@ -48,6 +48,25 @@ if (GOOGLE_CALLBACK_URL) {
   }
 }
 
+// Correo (nodemailer). Los valores por defecto apuntan a Mailpit (docker compose up -d), que no pide credenciales
+const SMTP_PORT = Number(process.env.SMTP_PORT || 1025);
+if (!Number.isInteger(SMTP_PORT) || SMTP_PORT < 1 || SMTP_PORT > 65535) {
+  throw new Error(`SMTP_PORT is invalid ("${process.env.SMTP_PORT}"); use a port between 1 and 65535`);
+}
+const SMTP_SECURE_RAW = (process.env.SMTP_SECURE || "false").toLowerCase();
+if (SMTP_SECURE_RAW !== "true" && SMTP_SECURE_RAW !== "false") {
+  throw new Error(`SMTP_SECURE is invalid ("${process.env.SMTP_SECURE}"); use true or false`);
+}
+
+// URL pública del API: se usa para armar los enlaces de los correos. Sin "/" al final
+const PORT = Number(process.env.PORT) || 3000;
+const APP_URL = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/+$/, "");
+try {
+  new URL(APP_URL);
+} catch {
+  throw new Error(`APP_URL is not a valid URL ("${APP_URL}")`);
+}
+
 // Nivel mínimo que se escribe en el log (de más a menos grave): fatal, error, warn, info, debug, trace o silent
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 type LogLevel = (typeof LOG_LEVELS)[number];
@@ -57,7 +76,7 @@ if (!LOG_LEVELS.includes(LOG_LEVEL as LogLevel)) {
 }
 
 export const env = {
-  PORT: Number(process.env.PORT) || 3000,
+  PORT,
   NODE_ENV,
   LOG_LEVEL: LOG_LEVEL as LogLevel,
   DATABASE_URL: required("DATABASE_URL"),
@@ -66,6 +85,13 @@ export const env = {
   // En segundos
   VERIFY_TOKEN_TTL,
   RESET_TOKEN_TTL,
+  APP_URL,
+  SMTP_HOST: process.env.SMTP_HOST || "localhost",
+  SMTP_PORT,
+  SMTP_SECURE: SMTP_SECURE_RAW === "true",
+  SMTP_USER: process.env.SMTP_USER ?? "",
+  SMTP_PASS: process.env.SMTP_PASS ?? "",
+  MAIL_FROM: process.env.MAIL_FROM || "Recall <no-reply@recall.local>",
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_CALLBACK_URL,
