@@ -16,11 +16,24 @@ if (NODE_ENV === "production" && JWT_SECRET === EXAMPLE_JWT_SECRET) {
   throw new Error("JWT_SECRET must not use the example value when NODE_ENV=production");
 }
 
-// Duración de la sesión: segundos ("3600") o un número con unidad ("30s", "15m", "1h", "7d")
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "1h";
-if (!/^\d+$|^\d+(s|m|h|d)$/.test(JWT_EXPIRES_IN)) {
-  throw new Error(`JWT_EXPIRES_IN is invalid ("${JWT_EXPIRES_IN}"); use seconds or a number with s, m, h or d (e.g. 15m)`);
+// Duraciones: segundos ("3600") o un número con unidad ("30s", "15m", "1h", "7d")
+const UNIT_SECONDS = { s: 1, m: 60, h: 3600, d: 86400 } as const;
+function duration(name: string, fallback: string): { raw: string; seconds: number } {
+  const raw = process.env[name] || fallback;
+  const match = /^(\d+)([smhd]?)$/.exec(raw);
+  if (!match) {
+    throw new Error(`${name} is invalid ("${raw}"); use seconds or a number with s, m, h or d (e.g. 15m)`);
+  }
+  const unit = (match[2] || "s") as keyof typeof UNIT_SECONDS;
+  return { raw, seconds: Number(match[1]) * UNIT_SECONDS[unit] };
 }
+
+// Duración de la sesión
+const JWT_EXPIRES_IN = duration("JWT_EXPIRES_IN", "1h").raw;
+
+// Vigencia de los enlaces de un solo uso que se mandan por correo
+const VERIFY_TOKEN_TTL = duration("VERIFY_TOKEN_TTL", "24h").seconds;
+const RESET_TOKEN_TTL = duration("RESET_TOKEN_TTL", "1h").seconds;
 
 // Login con Google (opcional): sin estas tres variables el botón no aparece y /auth/google responde 503.
 // La ruta del callback sale de GOOGLE_CALLBACK_URL, y esa misma URL debe estar autorizada en Google Cloud Console
@@ -50,6 +63,9 @@ export const env = {
   DATABASE_URL: required("DATABASE_URL"),
   JWT_SECRET,
   JWT_EXPIRES_IN,
+  // En segundos
+  VERIFY_TOKEN_TTL,
+  RESET_TOKEN_TTL,
   GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET,
   GOOGLE_CALLBACK_URL,

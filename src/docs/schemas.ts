@@ -46,12 +46,13 @@ export const schemas = {
     User: {
         type: "object",
         description: "Usuario público: nunca incluye la contraseña ni su hash.",
-        required: ["id", "email", "name", "role", "createdAt", "updatedAt"],
+        required: ["id", "email", "name", "role", "emailVerified", "createdAt", "updatedAt"],
         properties: {
             id: uuid,
             email: { type: "string", format: "email", maxLength: 254, example: "ana.lopez@recall.app" },
             name: { type: "string", minLength: 1, maxLength: 100, example: "Ana López" },
             role: { $ref: "#/components/schemas/UserRole" },
+            emailVerified: { type: "boolean", description: "true cuando el usuario confirmó su correo (o entró con Google)", example: true },
             createdAt: timestamp,
             updatedAt: timestamp,
         },
