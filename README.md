@@ -247,8 +247,15 @@ Con el API corriendo:
 **Cómo está armada.** La especificación se genera al arrancar con `swagger-jsdoc`:
 
 - [src/docs/swagger.ts](src/docs/swagger.ts): la configuración general (`info`, `servers`, `tags` por módulo, `securitySchemes.bearerAuth`) y las rutas `/docs` y `/docs/openapi.json`.
-- [src/docs/schemas.ts](src/docs/schemas.ts): los modelos (`User`, `Session`, `Recording`, `Transcription`, `Summary`, enums) y el formato de error (`Error`), definidos una sola vez en `components/schemas`, y las respuestas de error comunes (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`) en `components/responses`. Los endpoints los reutilizan con `$ref`. `User` nunca incluye la contraseña.
-- Cada endpoint se documenta con un comentario `/** @openapi ... */` junto a su ruta, en el archivo de rutas de su módulo ([src/routes/](src/routes/)). Así, quien cambia una ruta ve su documentación. Las rutas protegidas declaran `security: [{ bearerAuth: [] }]`; las públicas, `security: []`.
+- [src/docs/schemas.ts](src/docs/schemas.ts): todo lo que se repite, definido una sola vez y reutilizado con `$ref`:
+  - `components/schemas`: los modelos (`User`, `Session`, `Recording`, `Transcription`, `Summary`, enums), el formato de error (`Error`, con `code` opcional), los modelos con las relaciones que incluye cada respuesta (`RecordingDetail`, `UserWithRecordings`…), los bodies de entrada (`CreateRecordingInput`, `UpdateSummaryInput`…) con las restricciones de los esquemas zod, y las envolturas `{ data, message }` (`RecordingEnvelope`, `SummaryListEnvelope`…). `User` nunca incluye la contraseña.
+  - `components/parameters`: el `id` de la ruta y los filtros de los listados.
+  - `components/responses`: los errores comunes (`BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`), `NoContent` (204) y `RecordingForbidden` (403 por grabación ajena o por `EMAIL_NOT_VERIFIED`).
+- Cada endpoint se documenta con un comentario `/** @openapi ... */` junto a su ruta, en el archivo de rutas de su módulo ([src/routes/](src/routes/)). Así, quien cambia una ruta ve su documentación. Las rutas protegidas declaran `security: [{ bearerAuth: [] }]`; las públicas, `security: []`. Cada descripción dice quién puede usar la ruta (`USER`, `ADMIN`, dueño o correo verificado), igual que la tabla de [Roles y permisos](#roles-y-permisos), y cada respuesta lleva su código real (200, 201, 202, 204, 400, 401, 403, 404 y 409).
+
+**Qué está documentado.** Todas las rutas del API (auth, users, recordings, transcriptions y summaries), `GET /health` y el login con Google. Las dos rutas de Google (`GET /auth/google` y el callback, que sale de `GOOGLE_CALLBACK_URL`) están fuera de `/api/v1` y solo **redirigen (302)**: se abren en el navegador, no con *Try it out*.
+
+**Si cambias una ruta, actualiza su comentario `@openapi`.** La documentación debe coincidir con lo que responde el API: si un campo, ruta o código no existe, no va en ella. Redocly ignora cinco advertencias que no aplican (las rutas de Google no tienen 2xx ni 4xx y `/health` no tiene 4xx) en [.redocly.lint-ignore.yaml](.redocly.lint-ignore.yaml).
 
 `swagger-jsdoc` busca los comentarios en `src/routes/*.ts` con `npm run dev` y en `dist/routes/*.js` después de `npm run build` (el `tsconfig.json` no usa `removeComments`). Con `failOnErrors`, un comentario con YAML inválido detiene el arranque en lugar de desaparecer de `/docs`. El CI valida la especificación con [Redocly CLI](https://redocly.com/docs/cli/) en cada push.
 
@@ -348,7 +355,7 @@ recall-api/
 │   ├── index.ts              # conecta a la BD y arranca el servidor
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
-│   ├── docs/                 # swagger.ts (configuración OpenAPI y /docs) y schemas.ts (esquemas compartidos)
+│   ├── docs/                 # swagger.ts (configuración OpenAPI y /docs) y schemas.ts (esquemas, parámetros y respuestas compartidos)
 │   ├── lib/                  # prisma, password (bcrypt), token (JWT), oneTimeToken, appLink, permissions, ApiError, logger (pino)
 │   ├── middlewares/          # auth, validate, errorHandler, notFound, requestLogger
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
