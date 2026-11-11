@@ -51,7 +51,7 @@ npm run build && npm start
 
 1. `npm ci` instala las dependencias y genera el cliente de Prisma (`postinstall`).
 2. `cp .env.example .env` crea tu configuración. Los valores por defecto funcionan tal cual con el `docker-compose.yml` (incluye un `JWT_SECRET` de desarrollo; para un servidor real genera uno propio, ver [Variables de entorno](#variables-de-entorno)).
-3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`). Espera unos segundos a que acepte conexiones antes del siguiente paso.
+3. `docker compose up -d` levanta PostgreSQL en el puerto `5432` (usuario, contraseña y base: `recall`) y Mailpit, el servidor de correo de pruebas (ver [Correo](#correo)). Espera unos segundos a que acepte conexiones antes del siguiente paso.
 4. `npx prisma migrate deploy` aplica las migraciones versionadas en `prisma/migrations`.
 5. `npm run seed` limpia la BD y carga los datos de prueba (ver [Datos de prueba](#datos-de-prueba-seed)).
 6. `npm run build && npm start` compila y arranca el API en el puerto `PORT` (por defecto `3000`). Al arrancar escribe en el log `Connected to the database. Recall API listening`.
@@ -83,6 +83,9 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
 | `JWT_SECRET` | Secreto con el que se firman los JWT (obligatorio, mínimo 32 caracteres). El valor de `.env.example` es solo de desarrollo y se rechaza con `NODE_ENV=production`. Para generar uno: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `JWT_EXPIRES_IN` | Duración de la sesión: segundos (`3600`) o un número con unidad (`30s`, `15m`, `1h`, `7d`). Por defecto `1h`. Para probar un token expirado, bájala (p. ej. `5s`) y reinicia el API |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | Servidor SMTP. Por defecto `localhost:1025` (Mailpit, sin autenticación). Ver [Correo](#correo) |
+| `MAIL_FROM` | Remitente de los correos. Por defecto `Recall <no-reply@recall.local>` |
+| `APP_URL` | Dirección pública del API; con ella se arman los enlaces de los correos. Por defecto `http://localhost:<PORT>` |
 | `VERIFY_TOKEN_TTL` | Vigencia del enlace de verificación de correo, con el mismo formato que `JWT_EXPIRES_IN`. Por defecto `24h` |
 | `RESET_TOKEN_TTL` | Vigencia del enlace para recuperar la contraseña. Por defecto `1h` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Login con Google (opcional). Sin ellas el botón no aparece. Ver [Login con Google](#login-con-google) |
@@ -155,6 +158,23 @@ curl localhost:3000/api/v1/recordings -H "Authorization: Bearer $TOKEN"
 ```
 
 En las vistas, entra en <http://localhost:3000/login> con cualquiera de esos correos. La sesión se guarda en una cookie `httpOnly`.
+
+## Correo
+
+El API manda correos con [nodemailer](https://nodemailer.com). En desarrollo se usa **Mailpit**, un servidor SMTP de pruebas que no necesita cuenta y guarda los correos para verlos en el navegador.
+
+1. `docker compose up -d` levanta Mailpit junto con la base de datos (SMTP en el puerto `1025`, web en el `8025`).
+2. En tu `.env` deja los valores de `.env.example`: `SMTP_HOST=localhost`, `SMTP_PORT=1025`, `SMTP_SECURE=false`, `SMTP_USER` y `SMTP_PASS` vacías, `MAIL_FROM` y `APP_URL=http://localhost:3000` (cámbialo si el API corre en otra dirección o puerto, porque de ahí salen los enlaces de los correos).
+3. Abre <http://localhost:8025>: ahí aparece cada correo con su versión HTML y su versión de texto.
+
+Si prefieres Ethereal, Mailtrap o un SMTP real, solo cambian `SMTP_*` y `MAIL_FROM`; el código no se toca.
+
+**Si el envío falla** (por ejemplo, Mailpit apagado), el error no se lanza: la petición responde igual y queda en el log un `warn` `Email not sent` con el tipo de correo, el usuario y el motivo. El log nunca incluye el enlace ni el token.
+
+**Dónde está cada cosa**
+- [src/services/mail.service.ts](src/services/mail.service.ts): el único lugar que crea el transporte; una función por correo (`sendVerificationEmail`, `sendPasswordResetEmail`).
+- [src/services/mail.templates.ts](src/services/mail.templates.ts): el layout común y el contenido de cada correo.
+- [src/lib/appLink.ts](src/lib/appLink.ts): arma los enlaces con `APP_URL`; ningún dominio está escrito en el código.
 
 ## Login con Google
 
@@ -293,11 +313,12 @@ recall-api/
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
 │   ├── docs/                 # swagger.ts (configuración OpenAPI y /docs) y schemas.ts (esquemas compartidos)
-│   ├── lib/                  # prisma, password (bcrypt), token (JWT), oneTimeToken, permissions, ApiError, logger (pino)
+│   ├── lib/                  # prisma, password (bcrypt), token (JWT), oneTimeToken, appLink, permissions, ApiError, logger (pino)
 │   ├── middlewares/          # auth, validate, errorHandler, notFound, requestLogger
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
 │   ├── models/               # tipos TypeScript por entidad
 │   ├── controllers/          # lógica de cada endpoint (consultas con Prisma) + vistas
+│   ├── services/             # mail.service (nodemailer) y mail.templates (HTML y texto)
 │   └── routes/               # un Router por módulo + index.ts + view.routes.ts
 ├── docker-compose.yml
 ├── Dockerfile
