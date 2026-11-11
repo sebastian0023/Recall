@@ -2,6 +2,8 @@ import express, { Router } from "express";
 import { env } from "../config/env.js";
 import { googleCallback, googleStart } from "../controllers/google.controller.js";
 import {
+    forgotPasswordForm,
+    forgotPasswordView,
     home,
     login,
     loginForm,
@@ -12,6 +14,8 @@ import {
     register,
     registerForm,
     resendVerificationView,
+    resetPasswordForm,
+    resetPasswordView,
     userList,
     verifyEmailPage,
     viewErrorHandler,
@@ -33,6 +37,10 @@ router.post("/login", express.urlencoded({ extended: false }), login);
 router.get("/register", registerForm);
 router.post("/register", express.urlencoded({ extended: false }), register);
 router.post("/logout", logout);
+router.get("/forgot-password", forgotPasswordForm);
+router.post("/forgot-password", express.urlencoded({ extended: false }), forgotPasswordView);
+router.get("/reset-password", resetPasswordForm);
+router.post("/reset-password", express.urlencoded({ extended: false }), resetPasswordView);
 router.get("/verify-email", verifyEmailPage);
 router.post("/resend-verification", viewAuth, resendVerificationView);
 

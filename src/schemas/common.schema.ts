@@ -12,3 +12,6 @@ export function atLeastOne<T extends z.ZodObject>(schema: T) {
 }
 
 export const email = z.email({ error: "Must be a valid email" }).max(254);
+
+// Mismas reglas al registrarse y al restablecer la contraseña (72 es el límite de bcrypt)
+export const password = z.string().min(8, "Must be at least 8 characters").max(72, "Must be at most 72 characters");
