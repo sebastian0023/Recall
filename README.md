@@ -133,8 +133,10 @@ Cada usuario tiene un `role` (enum `USER` | `ADMIN`, por defecto `USER`). El mid
 | Cambiar el rol de un usuario | No | No | Sí |
 | Eliminar usuario | No | No | Sí |
 | Listar grabaciones | No | Propias | Todas |
-| Crear grabación | No | A su nombre | Para cualquier usuario |
-| Ver, editar, procesar o eliminar grabación | No | Propias | Todas |
+| Crear grabación | No | A su nombre, **con el correo verificado** | Para cualquier usuario (con el correo verificado) |
+| Procesar grabación | No | Propias, **con el correo verificado** | Todas (con el correo verificado) |
+| Ver, editar o eliminar grabación | No | Propias | Todas |
+| Reenviar el correo de verificación | No | Sí | Sí |
 | Listar, ver, crear, editar o eliminar transcripciones y resúmenes | No | De sus grabaciones | Todos |
 | Vistas web | No | Sus datos | Todos los datos |
 
@@ -175,6 +177,20 @@ Si prefieres Ethereal, Mailtrap o un SMTP real, solo cambian `SMTP_*` y `MAIL_FR
 - [src/services/mail.service.ts](src/services/mail.service.ts): el único lugar que crea el transporte; una función por correo (`sendVerificationEmail`, `sendPasswordResetEmail`).
 - [src/services/mail.templates.ts](src/services/mail.templates.ts): el layout común y el contenido de cada correo.
 - [src/lib/appLink.ts](src/lib/appLink.ts): arma los enlaces con `APP_URL`; ningún dominio está escrito en el código.
+
+## Verificación de correo
+
+Al registrarse (por `POST /auth/register` o por la vista `/register`) el usuario queda con `emailVerified: false` y recibe un correo con un enlace `APP_URL/verify-email?token=…`. El token es de un solo uso y vence con `VERIFY_TOKEN_TTL` (24 h por defecto). Si el correo no sale, la cuenta se crea igual (201) y queda un `warn` en el log.
+
+- **Verificar:** abrir el enlace (vista `GET /verify-email`) o `POST /auth/verify-email` con `{ "token": "…" }`. Token inválido, expirado o ya usado → 400 con un mensaje claro (`Invalid token`, `Token expired` o `Token already used`).
+- **Reenviar:** `POST /auth/resend-verification` (con sesión) invalida el enlace anterior y manda uno nuevo. Si el correo **ya está verificado responde 200 sin enviar nada** (`Email already verified`). En las vistas, el aviso amarillo de arriba trae el botón "Reenviar enlace".
+- **Google:** los usuarios que entran con Google quedan verificados, porque Google ya exige `email_verified`.
+
+**Qué puede hacer un usuario sin verificar.** Iniciar sesión, leer y editar sus datos, y ver, editar y borrar sus grabaciones. **No puede subir ni procesar audio** (`POST /recordings` y `POST /recordings/:id/process`): el middleware `requireVerifiedEmail` ([src/middlewares/authorize.ts](src/middlewares/authorize.ts)) responde 403:
+
+```json
+{ "error": { "message": "Verifica tu correo para realizar esta acción", "code": "EMAIL_NOT_VERIFIED", "requestId": "…" } }
+```
 
 ## Login con Google
 
@@ -223,7 +239,7 @@ El API usa **[pino](https://getpino.io)**. Hay un solo logger, configurado en [s
 **Qué se registra**
 
 - **Una línea por petición** ([src/middlewares/requestLogger.ts](src/middlewares/requestLogger.ts), con `pino-http`): método, ruta, código de respuesta y duración en ms (`responseTime`). Por ejemplo `GET /api/v1/recordings 200 12ms`.
-- **Id de petición:** se toma del encabezado `X-Request-Id` si viene (hasta 128 caracteres: letras, números, `_`, `.`, `:` o `-`) o se genera con `crypto.randomUUID()`. Aparece como `reqId` en todas las líneas de esa petición, se regresa en el encabezado `X-Request-Id` de la respuesta y en el campo `requestId` de los errores (`{ "error": { "message", "details?", "requestId" } }`). Así un error que reporta un usuario se encuentra en el log.
+- **Id de petición:** se toma del encabezado `X-Request-Id` si viene (hasta 128 caracteres: letras, números, `_`, `.`, `:` o `-`) o se genera con `crypto.randomUUID()`. Aparece como `reqId` en todas las líneas de esa petición, se regresa en el encabezado `X-Request-Id` de la respuesta y en el campo `requestId` de los errores (`{ "error": { "message", "details?", "code?", "requestId" } }`). Así un error que reporta un usuario se encuentra en el log.
 - **Errores:** el middleware de errores escribe los errores inesperados (500) con su stack y su `reqId`. La respuesta nunca incluye el stack.
 - **Eventos:** arranque del servidor, registro de usuarios (con contraseña o con Google), logins fallidos y la falta de conexión a la base de datos al arrancar.
 
@@ -367,7 +383,9 @@ Prefijo `/api/v1` (excepto `/health`).
 | Health | `GET /health` | 200 `{ status: "ok" }` |
 | Auth | `POST /auth/register` | 201 usuario creado (rol `USER`); 409 si el correo ya existe; 400 si falta un campo, la contraseña mide menos de 8 o se envía `role` |
 | Auth | `POST /auth/login` | 200 `{ accessToken, tokenType, expiresIn, user }`; 401 `Incorrect email or password` (mismo mensaje si el correo no existe o la contraseña es incorrecta) |
-| Auth | `GET /auth/me` | 200 usuario autenticado (401 sin sesión) |
+| Auth | `GET /auth/me` | 200 usuario autenticado, con `emailVerified` (401 sin sesión) |
+| Auth | `POST /auth/verify-email` | 200 usuario con `emailVerified: true`; 400 si el token es inválido, expiró o ya se usó |
+| Auth | `POST /auth/resend-verification` | 200 correo reenviado (o ya verificado, sin enviar nada); 401 sin sesión |
 | Users | `GET /users` | 200 lista (solo `ADMIN`) |
 | Users | `GET /users/:id` | 200 usuario con sus grabaciones; 404; 400 |
 | Users | `PATCH /users/:id` | 200; 404; 409 si el correo ya existe |
@@ -376,10 +394,10 @@ Prefijo `/api/v1` (excepto `/health`).
 | Recordings | `GET /recordings/:id` | 200 con `user`, `transcription` y `summaries`; 404; 400 |
 | Recordings | `GET /recordings/:id/summaries` | 200 lista de resúmenes |
 | Recordings | `GET /recordings/:id/transcription` | 200 transcripción; 404 si no tiene |
-| Recordings | `POST /recordings` | 201; 404 si el `userId` no existe |
+| Recordings | `POST /recordings` | 201; 403 `EMAIL_NOT_VERIFIED` si el correo no está verificado; 404 si el `userId` no existe |
 | Recordings | `PATCH /recordings/:id` | 200; 404 |
 | Recordings | `DELETE /recordings/:id` | 204 (borra dependientes); 404 |
-| Recordings | `POST /recordings/:id/process` | 202 grabación `PROCESSING` |
+| Recordings | `POST /recordings/:id/process` | 202 grabación `PROCESSING`; 403 `EMAIL_NOT_VERIFIED` |
 | Transcriptions | `GET /transcriptions` | 200 lista |
 | Transcriptions | `GET /transcriptions/:id` | 200; 404; 400 |
 | Transcriptions | `POST /transcriptions` | 201; 404 si no existe la grabación; 409 si ya tiene transcripción |
@@ -418,12 +436,13 @@ Formato de respuesta:
 }
 ```
 
-**Errores.** Todos pasan por el middleware central [src/middlewares/errorHandler.ts](src/middlewares/errorHandler.ts) y responden `{ "error": { "message": "…", "requestId": "…" } }` (con `details` solo en validación). `requestId` es el mismo del encabezado `X-Request-Id` y del log de esa petición. Nunca incluyen stack trace ni códigos de la BD: ese detalle solo se escribe en el log (ver [Logs](#logs)).
+**Errores.** Todos pasan por el middleware central [src/middlewares/errorHandler.ts](src/middlewares/errorHandler.ts) y responden `{ "error": { "message": "…", "requestId": "…" } }` (con `details` solo en validación y con `code` solo en algunos errores, p. ej. `EMAIL_NOT_VERIFIED`). `requestId` es el mismo del encabezado `X-Request-Id` y del log de esa petición. Nunca incluyen stack trace ni códigos de la BD: ese detalle solo se escribe en el log (ver [Logs](#logs)).
 
 | Situación | Status |
 | --- | --- |
 | Body/params/query inválidos, JSON mal formado, valor demasiado largo para la BD | 400 |
 | Falta el token, o es inválido, alterado o expiró | 401 |
+| Correo sin verificar en una acción que lo exige | 403 `EMAIL_NOT_VERIFIED` |
 | Recurso inexistente (`P2025`), ruta inexistente | 404 |
 | Duplicado (`P2002`), usuario con grabaciones, referencia inválida (`P2003`) | 409 |
 | Body demasiado grande | 413 |

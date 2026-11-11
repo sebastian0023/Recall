@@ -7,6 +7,7 @@ export interface AuthUser {
     email: string;
     name: string;
     role: UserRole;
+    emailVerified: boolean;
 }
 
 // requireAuth deja al usuario en req.user; sin él no hay sesión

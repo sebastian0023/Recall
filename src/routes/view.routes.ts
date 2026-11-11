@@ -6,11 +6,14 @@ import {
     login,
     loginForm,
     logout,
+    noticeFromQuery,
     recordingDetail,
     recordingList,
     register,
     registerForm,
+    resendVerificationView,
     userList,
+    verifyEmailPage,
     viewErrorHandler,
     viewNotFound,
 } from "../controllers/view.controller.js";
@@ -23,11 +26,15 @@ import { listRecordingsQuery } from "../schemas/recording.schema.js";
 
 const router = Router();
 
+router.use(noticeFromQuery);
+
 router.get("/login", loginForm);
 router.post("/login", express.urlencoded({ extended: false }), login);
 router.get("/register", registerForm);
 router.post("/register", express.urlencoded({ extended: false }), register);
 router.post("/logout", logout);
+router.get("/verify-email", verifyEmailPage);
+router.post("/resend-verification", viewAuth, resendVerificationView);
 
 router.get("/auth/google", googleStart);
 if (env.GOOGLE_ENABLED) router.get(googleCallbackPath(), googleCallback);

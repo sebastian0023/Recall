@@ -1,0 +1,11 @@
+<section class="login">
+  {{#if verified}}
+    <h1>Correo verificado</h1>
+    <p class="success-text">Listo, tu correo quedó confirmado.</p>
+    <p><a href="{{#if loggedIn}}/{{else}}/login{{/if}}">{{#if loggedIn}}Ir al inicio{{else}}Iniciar sesión{{/if}}</a></p>
+  {{else}}
+    <h1>No se pudo verificar</h1>
+    <p class="error-text">{{error}}</p>
+    <p><a href="/login">Iniciar sesión</a> para pedir un enlace nuevo.</p>
+  {{/if}}
+</section>

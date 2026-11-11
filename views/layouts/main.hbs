@@ -20,7 +20,15 @@
     {{/if}}
   </header>
 
+  {{#if user}}{{#unless user.emailVerified}}
+    <div class="notice notice-warning">
+      <span>Tu correo no está verificado. Hasta que lo verifiques no puedes subir ni procesar grabaciones.</span>
+      <form class="inline" method="post" action="/resend-verification"><button type="submit">Reenviar enlace</button></form>
+    </div>
+  {{/unless}}{{/if}}
+
   <main class="container">
+    {{#if notice}}<p class="notice">{{notice}}</p>{{/if}}
     {{{body}}}
   </main>
 

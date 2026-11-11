@@ -19,11 +19,11 @@ function errorField(err: unknown, key: "code" | "type"): string | undefined {
     return typeof value === "string" ? value : undefined;
 }
 
-// Todas las respuestas de error tienen el formato { error: { message, details?, requestId } }.
+// Todas las respuestas de error tienen el formato { error: { message, details?, code?, requestId } }.
 // requestId es el mismo del encabezado X-Request-Id y de las líneas del log de esa petición
-function sendError(req: Request, res: Response, status: number, message: string, details?: ErrorDetail[]) {
+function sendError(req: Request, res: Response, status: number, message: string, details?: ErrorDetail[], code?: string) {
     res.status(status).json({
-        error: { message, ...(details && { details }), requestId: String(req.id) },
+        error: { message, ...(details && { details }), ...(code && { code }), requestId: String(req.id) },
     });
 }
 
@@ -34,7 +34,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     if (err instanceof ApiError) {
         if (err.status >= 500) req.log.error({ err }, err.message);
         else req.log.debug({ status: err.status, message: err.message, details: err.details }, "Request rejected");
-        sendError(req, res, err.status, err.message, err.details);
+        sendError(req, res, err.status, err.message, err.details, err.code);
         return;
     }
 

@@ -6,8 +6,8 @@ import { prisma } from "../lib/prisma.js";
 import { SESSION_COOKIE, setSessionCookie } from "../middlewares/auth.js";
 import type { RecordingStatus } from "../models/recording.model.js";
 import { signToken } from "../lib/token.js";
-import { loginBody, registerBody } from "../schemas/auth.schema.js";
-import { authenticate, createUser } from "./auth.controller.js";
+import { loginBody, registerBody, verifyEmailBody } from "../schemas/auth.schema.js";
+import { authenticate, createUser, resendVerification, verifyEmail } from "./auth.controller.js";
 
 const STATUSES: RecordingStatus[] = ["UPLOADED", "PROCESSING", "DONE", "FAILED"];
 
@@ -19,6 +19,30 @@ const LOGIN_ERRORS: Record<string, string> = {
     google_unverified: "Tu correo de Google no está verificado",
     google_disabled: "El inicio de sesión con Google no está configurado",
 };
+
+// Avisos que las vistas muestran arriba cuando la URL trae ?notice=<código> (lo ponen los redirects)
+const NOTICES: Record<string, string> = {
+    verification_sent: "Te mandamos un enlace de verificación. Revisa tu correo.",
+    already_verified: "Tu correo ya estaba verificado.",
+};
+
+// Deja el texto del aviso en res.locals.notice para que lo pinte el layout
+export function noticeFromQuery(req: Request, res: Response, next: NextFunction) {
+    const code = req.query.notice;
+    if (typeof code === "string" && NOTICES[code]) res.locals.notice = NOTICES[code];
+    next();
+}
+
+// Mensajes en español para los errores de los tokens de un solo uso (los mensajes del API van en inglés)
+export const TOKEN_ERRORS: Record<string, string> = {
+    "Invalid token": "El enlace no es válido. Revisa que esté completo o pide uno nuevo.",
+    "Token already used": "Este enlace ya se usó. Si lo necesitas, pide uno nuevo.",
+    "Token expired": "El enlace expiró. Pide uno nuevo.",
+};
+
+export function tokenErrorMessage(err: ApiError): string {
+    return TOKEN_ERRORS[err.message] ?? TOKEN_ERRORS["Invalid token"]!;
+}
 
 function loginError(code: unknown): string | undefined {
     return typeof code === "string" ? LOGIN_ERRORS[code] : undefined;
@@ -96,6 +120,29 @@ export async function register(req: Request, res: Response) {
         if (!(err instanceof ApiError) || err.status !== 409) throw err;
         renderRegister(res, 409, body, ["Ese correo ya está registrado"]);
     }
+}
+
+// El enlace del correo apunta aquí. Es pública: el token ya identifica al usuario y el enlace se puede abrir en otro navegador
+export async function verifyEmailPage(req: Request, res: Response) {
+    const input = verifyEmailBody.safeParse({ token: req.query.token });
+    if (!input.success) {
+        res.status(400).render("verify-email", { title: "Verificar correo", error: TOKEN_ERRORS["Invalid token"] });
+        return;
+    }
+
+    try {
+        await verifyEmail(input.data.token, req.log);
+        res.render("verify-email", { title: "Correo verificado", verified: true, loggedIn: hasSession(req) });
+    } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 400) throw err;
+        res.status(400).render("verify-email", { title: "Verificar correo", error: tokenErrorMessage(err) });
+    }
+}
+
+// Botón "Reenviar enlace" del aviso del layout
+export async function resendVerificationView(req: Request, res: Response) {
+    const result = await resendVerification(currentUser(req).id, req.log);
+    res.redirect(`/?notice=${result === "already" ? "already_verified" : "verification_sent"}`);
 }
 
 export function logout(_req: Request, res: Response) {

@@ -10,6 +10,14 @@ export function requireRole(...roles: UserRole[]): RequestHandler {
     };
 }
 
+// Acciones que exigen haber confirmado el correo (subir y procesar audio). Iniciar sesión y leer no se bloquean
+export const requireVerifiedEmail: RequestHandler = (req, _res, next) => {
+    if (!currentUser(req).emailVerified) {
+        throw new ApiError(403, "Verifica tu correo para realizar esta acción", undefined, "EMAIL_NOT_VERIFIED");
+    }
+    next();
+};
+
 export const requireSelfOrAdmin: RequestHandler = (req, _res, next) => {
     assertCanAccess(currentUser(req), req.params.id as string);
     next();
