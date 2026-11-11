@@ -1,22 +1,6 @@
 import { engine } from "express-handlebars";
+import { ROLE_LABELS, STATUS_LABELS, TEMPLATE_LABELS } from "./labels.js";
 
-const STATUS_LABELS: Record<string, string> = {
-    UPLOADED: "Subida",
-    PROCESSING: "Procesando",
-    DONE: "Lista",
-    FAILED: "Falló",
-};
-
-const TEMPLATE_LABELS: Record<string, string> = {
-    MEETING: "Reunión",
-    CLASS: "Clase",
-    INTERVIEW: "Entrevista",
-};
-
-const ROLE_LABELS: Record<string, string> = {
-    USER: "Usuario",
-    ADMIN: "Administrador",
-};
 
 const dateFormat = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" });
 

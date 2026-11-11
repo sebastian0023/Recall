@@ -1,9 +1,11 @@
 import { env } from "../config/env.js";
+import { TEMPLATE_LABELS } from "../lib/labels.js";
 
 export interface EmailContent {
     subject: string;
     heading: string;
     paragraphs: string[];
+    quote?: string; // fragmento citado (p. ej. el extracto de un resumen)
     action?: { label: string; url: string };
     footnote?: string;
 }
@@ -33,8 +35,16 @@ export function humanDuration(seconds: number): string {
     return `${seconds} ${seconds === 1 ? "segundo" : "segundos"}`;
 }
 
+// Extracto de un texto largo: junta los espacios y saltos de línea y corta en la última palabra completa
+export function excerpt(content: string, max = 300): string {
+    const text = content.replace(/\s+/g, " ").trim();
+    if (text.length <= max) return text;
+    const cut = text.slice(0, max);
+    return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1))}…`;
+}
+
 // Layout común: todos los correos salen de aquí, con versión HTML (estilos en línea) y versión de texto
-export function renderEmail({ subject, heading, paragraphs, action, footnote }: EmailContent): RenderedEmail {
+export function renderEmail({ subject, heading, paragraphs, quote, action, footnote }: EmailContent): RenderedEmail {
     const note = footnote ?? "Si no fuiste tú, puedes ignorar este correo.";
 
     const html = `<!doctype html>
@@ -46,6 +56,7 @@ export function renderEmail({ subject, heading, paragraphs, action, footnote }: 
       <tr><td style="padding:32px;">
         <h1 style="margin:0 0 16px;font-size:20px;">${escapeHtml(heading)}</h1>
         ${paragraphs.map((p) => `<p style="margin:0 0 16px;line-height:1.5;">${escapeHtml(p)}</p>`).join("\n        ")}
+        ${quote ? `<blockquote style="margin:0 0 16px;padding:8px 16px;border-left:4px solid #2563eb;background:#f4f5f7;line-height:1.5;color:#323f4b;">${escapeHtml(quote)}</blockquote>` : ""}
         ${
             action
                 ? `<p style="margin:24px 0;"><a href="${escapeHtml(action.url)}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;">${escapeHtml(action.label)}</a></p>
@@ -65,6 +76,7 @@ export function renderEmail({ subject, heading, paragraphs, action, footnote }: 
         heading,
         "",
         ...paragraphs.flatMap((p) => [p, ""]),
+        ...(quote ? [...quote.split("\n").map((line) => `> ${line}`), ""] : []),
         ...(action ? [`${action.label}: ${action.url}`, ""] : []),
         note,
     ].join("\n");
@@ -91,4 +103,18 @@ export const passwordResetEmail = (name: string, link: string): EmailContent => 
     ],
     action: { label: "Crear una contraseña nueva", url: link },
     footnote: "Si no pediste este cambio, ignora este correo: tu contraseña no se modifica.",
+});
+
+export const summaryReadyEmail = (
+    name: string,
+    recording: { title: string },
+    summary: { template: string; content: string },
+    link: string,
+): EmailContent => ({
+    subject: `Recall: tu resumen de "${recording.title}" está listo`,
+    heading: `Hola, ${name}`,
+    paragraphs: [`Ya está listo un resumen de tu grabación "${recording.title}" (${TEMPLATE_LABELS[summary.template] ?? summary.template}). Así empieza:`],
+    quote: excerpt(summary.content),
+    action: { label: "Ver el resumen", url: link },
+    footnote: "Recibes este correo porque la grabación es tuya.",
 });
