@@ -83,6 +83,8 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que Docker crea la BD |
 | `JWT_SECRET` | Secreto con el que se firman los JWT (obligatorio, mínimo 32 caracteres). El valor de `.env.example` es solo de desarrollo y se rechaza con `NODE_ENV=production`. Para generar uno: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `JWT_EXPIRES_IN` | Duración de la sesión: segundos (`3600`) o un número con unidad (`30s`, `15m`, `1h`, `7d`). Por defecto `1h`. Para probar un token expirado, bájala (p. ej. `5s`) y reinicia el API |
+| `VERIFY_TOKEN_TTL` | Vigencia del enlace de verificación de correo, con el mismo formato que `JWT_EXPIRES_IN`. Por defecto `24h` |
+| `RESET_TOKEN_TTL` | Vigencia del enlace para recuperar la contraseña. Por defecto `1h` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL` | Login con Google (opcional). Sin ellas el botón no aparece. Ver [Login con Google](#login-con-google) |
 | `AWS_*`, `S3_BUCKET`, `BEDROCK_MODEL_ID` | Reservadas para entregas siguientes |
 
@@ -104,11 +106,11 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 
 ## Datos de prueba (seed)
 
-`npm run seed` ([prisma/seed.ts](prisma/seed.ts)) borra el contenido de las 4 tablas y vuelve a cargar los mismos registros dentro de una transacción. Se puede correr las veces que sea sin errores ni duplicados.
+`npm run seed` ([prisma/seed.ts](prisma/seed.ts)) borra el contenido de las 5 tablas y vuelve a cargar los mismos registros dentro de una transacción. Se puede correr las veces que sea sin errores ni duplicados.
 
 | Entidad | Registros | Notas |
 | --- | --- | --- |
-| `User` | 6 | Uno de ellos (Diego) sin grabaciones, para probar el borrado |
+| `User` | 6 | Uno de ellos (Diego) sin grabaciones, para probar el borrado. Todos con `emailVerified: true` |
 | `Recording` | 8 | Repartidas entre 5 usuarios y con los 4 estados (`UPLOADED`, `PROCESSING`, `DONE`, `FAILED`) |
 | `Transcription` | 5 | Una por cada grabación `DONE`, con segmentos por hablante |
 | `Summary` | 6 | De las 3 plantillas; una grabación tiene 2 resúmenes |
@@ -291,7 +293,7 @@ recall-api/
 │   ├── app.ts                # Express, cors, json, rutas, notFound, errorHandler
 │   ├── config/env.ts         # variables de entorno
 │   ├── docs/                 # swagger.ts (configuración OpenAPI y /docs) y schemas.ts (esquemas compartidos)
-│   ├── lib/                  # prisma, password (bcrypt), token (JWT), permissions, ApiError, logger (pino)
+│   ├── lib/                  # prisma, password (bcrypt), token (JWT), oneTimeToken, permissions, ApiError, logger (pino)
 │   ├── middlewares/          # auth, validate, errorHandler, notFound, requestLogger
 │   ├── schemas/              # esquemas zod de body, params y query por módulo
 │   ├── models/               # tipos TypeScript por entidad
@@ -312,7 +314,9 @@ recall-api/
 - `User` 1 — N `Recording`
 - `Recording` 1 — 1 `Transcription` (`recordingId` único)
 - `Recording` 1 — N `Summary`
-- Índices únicos: `User.email`, `Transcription.recordingId`.
+- `User` 1 — N `AuthToken`: tokens de un solo uso (`VERIFY_EMAIL` o `RESET_PASSWORD`) con `expiresAt` y `usedAt`. En la BD solo se guarda el `sha256` del token (`tokenHash`); el token en claro solo viaja en el enlace del correo y `tokenHash` nunca aparece en una respuesta.
+- `User.emailVerified` indica si el usuario confirmó su correo (`false` al registrarse; los usuarios que ya existían al crear la columna quedaron en `true`).
+- Índices únicos: `User.email`, `Transcription.recordingId`, `AuthToken.tokenHash`.
 - `User.passwordHash` guarda el hash bcrypt (nulo para usuarios que entren solo con un proveedor externo). Prisma lo omite de todas las consultas y nunca aparece en una respuesta.
 
 Relaciones visibles en las respuestas:
@@ -324,12 +328,13 @@ Relaciones visibles en las respuestas:
 
 ## Política de borrado
 
-Borrado **físico**, resuelto en el código (no con triggers ni `ON DELETE CASCADE`; las llaves foráneas son `RESTRICT`):
+Borrado **físico**, resuelto en el código (no con triggers; las llaves foráneas son `RESTRICT`, salvo la de `AuthToken`):
 
 | Se elimina | Qué pasa |
 | --- | --- |
 | `Recording` | Se borran sus `Summary` y su `Transcription` y después la grabación, dentro de una transacción. Responde 204. |
 | `User` | Si tiene grabaciones, **no se elimina**: responde 409. Primero hay que borrar sus grabaciones. |
+| `AuthToken` | Se borran junto con su usuario (`ON DELETE CASCADE`). Es la única excepción a `RESTRICT`: son datos internos de seguridad que el API no expone. |
 | `Transcription` / `Summary` | Se elimina directamente (no tienen dependientes). Responde 204. |
 
 ## Endpoints

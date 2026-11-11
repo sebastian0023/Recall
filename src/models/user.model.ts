@@ -6,6 +6,7 @@ export interface User {
     email: string;
     name: string;
     role: UserRole;
+    emailVerified: boolean;
     createdAt: Date;
     updatedAt: Date;
 }

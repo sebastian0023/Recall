@@ -108,11 +108,12 @@ const summaries: Prisma.SummaryCreateManyInput[] = [
 async function main() {
     const passwordHash = await hashPassword(SEED_PASSWORD);
     await prisma.$transaction([
+        prisma.authToken.deleteMany(),
         prisma.summary.deleteMany(),
         prisma.transcription.deleteMany(),
         prisma.recording.deleteMany(),
         prisma.user.deleteMany(),
-        prisma.user.createMany({ data: users.map((user) => ({ ...user, passwordHash })) }),
+        prisma.user.createMany({ data: users.map((user) => ({ ...user, passwordHash, emailVerified: true })) }),
         prisma.recording.createMany({ data: recordings }),
         prisma.transcription.createMany({ data: transcriptions }),
         prisma.summary.createMany({ data: summaries }),

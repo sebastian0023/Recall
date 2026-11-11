@@ -12,6 +12,11 @@ enum UserRole {
   ADMIN
 }
 
+enum AuthTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
 enum RecordingStatus {
   UPLOADED
   PROCESSING
@@ -26,15 +31,32 @@ enum SummaryTemplate {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String? // bcrypt; nulo para usuarios que entran solo con un proveedor externo
-  name         String
-  role         UserRole @default(USER)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  passwordHash  String? // bcrypt; nulo para usuarios que entran solo con un proveedor externo
+  name          String
+  role          UserRole @default(USER)
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   recordings Recording[]
+  authTokens AuthToken[]
+}
+
+// Tokens de un solo uso (verificar correo, recuperar contraseña). Solo se guarda el sha256 del token
+model AuthToken {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
 }
 
 model Recording {
