@@ -2,7 +2,7 @@ import path from "node:path";
 import { Router } from "express";
 import swaggerJSDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
-import { responses, schemas } from "./schemas.js";
+import { parameters, responses, schemas } from "./schemas.js";
 
 // Carpeta raíz del código: src/ con npm run dev y dist/ después de npm run build.
 // Por eso se buscan los comentarios @openapi en archivos .ts y .js (tsconfig conserva los comentarios)
@@ -42,6 +42,7 @@ const definition = {
             },
         },
         schemas,
+        parameters,
         responses,
     },
 };
