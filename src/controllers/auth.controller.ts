@@ -9,7 +9,10 @@ import { DUMMY_HASH, hashPassword, verifyPassword } from "../lib/password.js";
 import { prisma } from "../lib/prisma.js";
 import { signToken } from "../lib/token.js";
 import { type LoginInput, type RegisterInput, toPublicUser } from "../models/user.model.js";
-import { sendVerificationEmail } from "../services/mail.service.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "../services/mail.service.js";
+
+// Misma respuesta exista o no el correo, para no revelar qué correos están registrados
+export const FORGOT_PASSWORD_MESSAGE = "Si el correo está registrado, recibirás un enlace";
 
 // Crea un token VERIFY_EMAIL (invalida el anterior) y manda el correo. Nunca lanza: si algo falla (correo o BD)
 // queda un warn y quien llama sigue su camino. Regresa true si el correo salió. El enlace no se escribe en el log
@@ -114,4 +117,47 @@ export async function resendVerificationHandler(req: Request, res: Response) {
         data: null,
         message: result === "already" ? "Email already verified" : "Verification email sent",
     });
+}
+
+// Si el correo existe, crea un token RESET_PASSWORD (invalida los anteriores) y manda el enlace. Si no existe, no hace nada
+export async function requestPasswordReset(email: string, log: Logger = logger): Promise<void> {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return;
+
+    const token = await createToken(user.id, "RESET_PASSWORD");
+    await sendPasswordResetEmail(user, appLink("/reset-password", { token }), log);
+}
+
+// Se llama sin esperar el resultado: así la respuesta tarda igual exista o no el correo.
+// Los fallos quedan como warn (sin el correo del usuario, el enlace ni el token)
+export function requestPasswordResetInBackground(email: string, log: Logger = logger): void {
+    requestPasswordReset(email, log).catch((err: unknown) => {
+        log.warn({ reason: err instanceof Error ? err.name : "unknown" }, "Password reset request failed");
+    });
+}
+
+// Guarda la contraseña nueva y marca el token como usado en una sola transacción. Token inválido, usado o vencido -> 400.
+// También sirve a quien solo entraba con Google (sin passwordHash): así crea su contraseña.
+// Abrir el enlace prueba que el correo es suyo, por eso queda verificado
+export async function resetPassword(token: string, password: string, log: Logger = logger): Promise<void> {
+    const passwordHash = await hashPassword(password); // bcrypt es lento: se hace antes de abrir la transacción
+    const userId = await prisma.$transaction(async (tx) => {
+        const id = await consumeToken(token, "RESET_PASSWORD", tx);
+        await tx.user.update({ where: { id }, data: { passwordHash, emailVerified: true } });
+        return id;
+    });
+    log.info({ userId }, "Password reset");
+}
+
+export function forgotPassword(req: Request, res: Response) {
+    requestPasswordResetInBackground((req.body as { email: string }).email, req.log);
+
+    res.status(200).json({ data: null, message: FORGOT_PASSWORD_MESSAGE });
+}
+
+export async function resetPasswordHandler(req: Request, res: Response) {
+    const { token, password } = req.body as { token: string; password: string };
+    await resetPassword(token, password, req.log);
+
+    res.status(200).json({ data: null, message: "Password updated" });
 }

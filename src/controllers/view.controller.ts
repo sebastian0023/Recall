@@ -6,8 +6,16 @@ import { prisma } from "../lib/prisma.js";
 import { SESSION_COOKIE, setSessionCookie } from "../middlewares/auth.js";
 import type { RecordingStatus } from "../models/recording.model.js";
 import { signToken } from "../lib/token.js";
-import { loginBody, registerBody, verifyEmailBody } from "../schemas/auth.schema.js";
-import { authenticate, createUser, resendVerification, verifyEmail } from "./auth.controller.js";
+import { forgotPasswordBody, loginBody, registerBody, resetPasswordBody, verifyEmailBody } from "../schemas/auth.schema.js";
+import {
+    authenticate,
+    createUser,
+    FORGOT_PASSWORD_MESSAGE,
+    requestPasswordResetInBackground,
+    resendVerification,
+    resetPassword,
+    verifyEmail,
+} from "./auth.controller.js";
 
 const STATUSES: RecordingStatus[] = ["UPLOADED", "PROCESSING", "DONE", "FAILED"];
 
@@ -24,6 +32,7 @@ const LOGIN_ERRORS: Record<string, string> = {
 const NOTICES: Record<string, string> = {
     verification_sent: "Te mandamos un enlace de verificación. Revisa tu correo.",
     already_verified: "Tu correo ya estaba verificado.",
+    password_reset: "Contraseña actualizada. Ya puedes iniciar sesión con la nueva.",
 };
 
 // Deja el texto del aviso en res.locals.notice para que lo pinte el layout
@@ -143,6 +152,60 @@ export async function verifyEmailPage(req: Request, res: Response) {
 export async function resendVerificationView(req: Request, res: Response) {
     const result = await resendVerification(currentUser(req).id, req.log);
     res.redirect(`/?notice=${result === "already" ? "already_verified" : "verification_sent"}`);
+}
+
+export function forgotPasswordForm(_req: Request, res: Response) {
+    res.render("forgot-password", { title: "Recuperar contraseña" });
+}
+
+// Responde lo mismo exista o no el correo, y sin esperar el envío
+export function forgotPasswordView(req: Request, res: Response) {
+    const input = forgotPasswordBody.safeParse(req.body ?? {});
+    if (!input.success) {
+        res.status(400).render("forgot-password", { title: "Recuperar contraseña", error: "Escribe un correo válido" });
+        return;
+    }
+
+    requestPasswordResetInBackground(input.data.email, req.log);
+    res.render("forgot-password", { title: "Recuperar contraseña", sent: true, message: FORGOT_PASSWORD_MESSAGE });
+}
+
+// El enlace del correo apunta aquí. La vista solo muestra el formulario; el token se usa al enviarlo
+export function resetPasswordForm(req: Request, res: Response) {
+    const input = verifyEmailBody.safeParse({ token: req.query.token });
+    if (!input.success) {
+        res.status(400).render("reset-password", { title: "Nueva contraseña", tokenError: TOKEN_ERRORS["Invalid token"] });
+        return;
+    }
+    res.render("reset-password", { title: "Nueva contraseña", token: input.data.token });
+}
+
+export async function resetPasswordView(req: Request, res: Response) {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const input = resetPasswordBody.safeParse({ token: body.token, password: body.password });
+    const token = typeof body.token === "string" ? body.token : "";
+
+    if (!input.success) {
+        const badToken = input.error.issues.some((issue) => issue.path[0] !== "password");
+        if (badToken) {
+            res.status(400).render("reset-password", { title: "Nueva contraseña", tokenError: TOKEN_ERRORS["Invalid token"] });
+        } else {
+            res.status(400).render("reset-password", { title: "Nueva contraseña", token, error: REGISTER_ERRORS.password });
+        }
+        return;
+    }
+    if (body.password !== body.confirm) {
+        res.status(400).render("reset-password", { title: "Nueva contraseña", token, error: "Las contraseñas no coinciden" });
+        return;
+    }
+
+    try {
+        await resetPassword(input.data.token, input.data.password, req.log);
+        res.redirect("/login?notice=password_reset");
+    } catch (err) {
+        if (!(err instanceof ApiError) || err.status !== 400) throw err;
+        res.status(400).render("reset-password", { title: "Nueva contraseña", tokenError: tokenErrorMessage(err) });
+    }
 }
 
 export function logout(_req: Request, res: Response) {

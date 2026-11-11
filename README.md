@@ -192,6 +192,16 @@ Al registrarse (por `POST /auth/register` o por la vista `/register`) el usuario
 { "error": { "message": "Verifica tu correo para realizar esta acción", "code": "EMAIL_NOT_VERIFIED", "requestId": "…" } }
 ```
 
+## Recuperar contraseña
+
+1. **Pedir el enlace:** `POST /auth/forgot-password` con `{ "email": "…" }` (o la vista `/forgot-password`, a la que lleva el enlace "¿Olvidaste tu contraseña?" del login). **Siempre responde 200** con `"Si el correo está registrado, recibirás un enlace"`, exista o no el correo, y no espera el envío: ni la respuesta ni su tiempo revelan qué correos están registrados. Si el correo existe, manda un enlace `APP_URL/reset-password?token=…` de un solo uso que vence con `RESET_TOKEN_TTL` (1 h por defecto). Pedir otro enlace invalida el anterior.
+2. **Guardar la contraseña nueva:** `POST /auth/reset-password` con `{ "token": "…", "password": "…" }`, o el formulario de la vista `GET /reset-password?token=…`. La contraseña sigue las mismas reglas que el registro (8 a 72 caracteres). Token inválido, expirado o ya usado → 400. Después del cambio, la contraseña anterior ya no sirve para iniciar sesión.
+
+- **Usuarios de Google:** quien entra solo con Google no tiene contraseña; este mismo flujo le permite **crear** una.
+- Restablecer la contraseña también deja el correo verificado, porque abrir el enlace prueba que el correo es suyo.
+- Las sesiones que ya estaban abiertas siguen válidas hasta que vencen (`JWT_EXPIRES_IN`).
+- Si el correo no sale, queda un `warn` en el log; el log nunca incluye el token ni la contraseña.
+
 ## Login con Google
 
 Flujo OAuth 2.0 / OpenID Connect (código de autorización) que usa la **misma sesión** que el login con contraseña: al terminar, el API guarda el mismo JWT en la cookie `recall_session`, así que los permisos son idénticos.
@@ -384,6 +394,8 @@ Prefijo `/api/v1` (excepto `/health`).
 | Auth | `POST /auth/register` | 201 usuario creado (rol `USER`); 409 si el correo ya existe; 400 si falta un campo, la contraseña mide menos de 8 o se envía `role` |
 | Auth | `POST /auth/login` | 200 `{ accessToken, tokenType, expiresIn, user }`; 401 `Incorrect email or password` (mismo mensaje si el correo no existe o la contraseña es incorrecta) |
 | Auth | `GET /auth/me` | 200 usuario autenticado, con `emailVerified` (401 sin sesión) |
+| Auth | `POST /auth/forgot-password` | 200 siempre con el mismo mensaje, exista o no el correo; 400 si el correo no tiene formato válido |
+| Auth | `POST /auth/reset-password` | 200 contraseña actualizada; 400 si el token es inválido, expiró o ya se usó, o la contraseña no cumple las reglas |
 | Auth | `POST /auth/verify-email` | 200 usuario con `emailVerified: true`; 400 si el token es inválido, expiró o ya se usó |
 | Auth | `POST /auth/resend-verification` | 200 correo reenviado (o ya verificado, sin enviar nada); 401 sin sesión |
 | Users | `GET /users` | 200 lista (solo `ADMIN`) |
