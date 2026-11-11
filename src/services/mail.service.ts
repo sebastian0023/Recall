@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import type { Logger } from "pino";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
-import { type EmailContent, passwordResetEmail, renderEmail, verificationEmail } from "./mail.templates.js";
+import { type EmailContent, passwordResetEmail, renderEmail, summaryReadyEmail, verificationEmail } from "./mail.templates.js";
 
 export interface MailRecipient {
     id: string;
@@ -42,3 +42,11 @@ export const sendVerificationEmail = (user: MailRecipient, link: string, log: Lo
 
 export const sendPasswordResetEmail = (user: MailRecipient, link: string, log: Logger = logger) =>
     send("reset-password", user, passwordResetEmail(user.name, link), log);
+
+export const sendSummaryReadyEmail = (
+    owner: MailRecipient,
+    recording: { title: string },
+    summary: { template: string; content: string },
+    link: string,
+    log: Logger = logger,
+) => send("summary-ready", owner, summaryReadyEmail(owner.name, recording, summary, link), log);

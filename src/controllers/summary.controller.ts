@@ -1,8 +1,11 @@
 import type { Request, Response } from "express";
+import type { Logger } from "pino";
 import { ApiError } from "../lib/apiError.js";
+import { appLink } from "../lib/appLink.js";
 import { assertCanAccess, currentUser, isAdmin } from "../lib/permissions.js";
 import { prisma } from "../lib/prisma.js";
 import type { CreateSummaryInput, SummaryTemplate, UpdateSummaryInput } from "../models/summary.model.js";
+import { sendSummaryReadyEmail } from "../services/mail.service.js";
 
 async function findSummaryOr404(id: string, req: Request) {
     const summary = await prisma.summary.findUnique({
@@ -39,16 +42,33 @@ export async function getSummaryById(req: Request, res: Response) {
     });
 }
 
+// Avisa al DUEÑO de la grabación (no a quien hace la petición: si un admin crea el resumen, le llega al dueño).
+// Solo a correos verificados, para no escribirle a alguien que no confirmó que la dirección es suya.
+// El resumen ya está creado: si el correo falla no cambia la respuesta (el servicio deja un warn)
+async function notifySummaryReady(
+    recording: { id: string; title: string; user: { id: string; email: string; name: string; emailVerified: boolean } },
+    summary: { template: string; content: string },
+    log: Logger,
+) {
+    const owner = recording.user;
+    if (!owner.emailVerified) {
+        log.info({ mail: "summary-ready", userId: owner.id }, "Email skipped: address not verified");
+        return;
+    }
+    await sendSummaryReadyEmail(owner, recording, summary, appLink(`/recordings/${recording.id}`), log);
+}
+
 export async function createSummary(req: Request, res: Response) {
     const { recordingId, template, content } = req.body as CreateSummaryInput;
 
-    const recording = await prisma.recording.findUnique({ where: { id: recordingId } });
+    const recording = await prisma.recording.findUnique({ where: { id: recordingId }, include: { user: true } });
     if (!recording) throw new ApiError(404, "Recording not found");
     assertCanAccess(currentUser(req), recording.userId);
 
     const summary = await prisma.summary.create({
         data: { recordingId, template, content },
     });
+    await notifySummaryReady(recording, summary, req.log);
 
     res.status(201).json({
         data: summary,

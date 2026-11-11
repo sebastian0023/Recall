@@ -171,10 +171,20 @@ El API manda correos con [nodemailer](https://nodemailer.com). En desarrollo se 
 
 Si prefieres Ethereal, Mailtrap o un SMTP real, solo cambian `SMTP_*` y `MAIL_FROM`; el código no se toca.
 
+**Correos del API**
+
+| Correo | Qué lo dispara | A quién le llega |
+| --- | --- | --- |
+| Verifica tu correo | Registro (`POST /auth/register` o `/register`) y `POST /auth/resend-verification` | Quien se registra |
+| Restablece tu contraseña | `POST /auth/forgot-password` (solo si el correo existe) | El dueño de la cuenta |
+| Tu resumen está listo | `POST /summaries` | El **dueño de la grabación** (si un administrador crea el resumen, le llega al dueño), solo si su correo está verificado |
+
+El correo "Tu resumen está listo" lleva el título de la grabación, la plantilla (Reunión, Clase o Entrevista), un extracto del contenido y un enlace a `APP_URL/recordings/:id`. Si el dueño no ha verificado su correo no se manda (queda un `info` en el log); si el envío falla, el resumen se crea igual (201).
+
 **Si el envío falla** (por ejemplo, Mailpit apagado), el error no se lanza: la petición responde igual y queda en el log un `warn` `Email not sent` con el tipo de correo, el usuario y el motivo. El log nunca incluye el enlace ni el token.
 
 **Dónde está cada cosa**
-- [src/services/mail.service.ts](src/services/mail.service.ts): el único lugar que crea el transporte; una función por correo (`sendVerificationEmail`, `sendPasswordResetEmail`).
+- [src/services/mail.service.ts](src/services/mail.service.ts): el único lugar que crea el transporte; una función por correo (`sendVerificationEmail`, `sendPasswordResetEmail`, `sendSummaryReadyEmail`).
 - [src/services/mail.templates.ts](src/services/mail.templates.ts): el layout común y el contenido de cada correo.
 - [src/lib/appLink.ts](src/lib/appLink.ts): arma los enlaces con `APP_URL`; ningún dominio está escrito en el código.
 
@@ -417,7 +427,7 @@ Prefijo `/api/v1` (excepto `/health`).
 | Transcriptions | `DELETE /transcriptions/:id` | 204; 404 |
 | Summaries | `GET /summaries` | 200 lista |
 | Summaries | `GET /summaries/:id` | 200; 404; 400 |
-| Summaries | `POST /summaries` | 201; 404 si no existe la grabación |
+| Summaries | `POST /summaries` | 201 y manda el correo "Tu resumen está listo" al dueño de la grabación; 404 si no existe la grabación |
 | Summaries | `PATCH /summaries/:id` | 200; 404 |
 | Summaries | `DELETE /summaries/:id` | 204; 404 |
 
