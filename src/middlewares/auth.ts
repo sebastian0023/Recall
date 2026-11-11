@@ -23,7 +23,7 @@ async function userFromToken(token: string): Promise<AuthUser> {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new ApiError(401, "User not registered");
 
-    return { id: user.id, email: user.email, name: user.name, role: user.role };
+    return { id: user.id, email: user.email, name: user.name, role: user.role, emailVerified: user.emailVerified };
 }
 
 // API: exige Authorization: Bearer <jwt>. Cualquier fallo responde 401

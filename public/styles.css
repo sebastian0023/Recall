@@ -23,6 +23,9 @@ code { font-size: 0.9em; background: #efefea; padding: 0 4px; border-radius: 4px
 .muted { color: var(--muted); }
 .empty { color: var(--muted); font-style: italic; }
 .error-text { color: #b42318; }
+.success-text { color: #067647; }
+.notice { max-width: 1000px; margin: 16px auto 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.notice-warning { background: #fffaeb; border-color: #fedf89; color: #93370d; }
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0 24px; }
 .stat { display: flex; flex-direction: column; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; text-decoration: none; color: inherit; }

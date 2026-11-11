@@ -9,6 +9,8 @@ export class ApiError extends Error {
         public readonly status: number,
         message: string,
         public readonly details?: ErrorDetail[],
+        // Código estable para que el cliente distinga el motivo sin leer el mensaje (p. ej. EMAIL_NOT_VERIFIED)
+        public readonly code?: string,
     ) {
         super(message);
         this.name = "ApiError";

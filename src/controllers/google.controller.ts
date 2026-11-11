@@ -51,8 +51,11 @@ export async function googleCallback(req: Request, res: Response) {
         // si no, se crea sin contraseña y con el rol por defecto (USER). El rol nunca viene de Google
         let user = await prisma.user.findFirst({ where: { email: { equals: profile.email, mode: "insensitive" } } });
         if (!user) {
-            user = await prisma.user.create({ data: { email: profile.email, name: profile.name } });
+            // Google ya exige email_verified (lib/google.ts), así que el correo nace verificado
+            user = await prisma.user.create({ data: { email: profile.email, name: profile.name, emailVerified: true } });
             req.log.info({ userId: user.id }, "User registered with Google");
+        } else if (!user.emailVerified) {
+            user = await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
         }
 
         const { token, expiresIn } = signToken(user.id);

@@ -24,6 +24,11 @@ export const schemas = {
                 required: ["message", "requestId"],
                 properties: {
                     message: { type: "string", example: "Resource not found" },
+                    code: {
+                        type: "string",
+                        description: "Solo en algunos errores: código estable para distinguir el motivo (p. ej. EMAIL_NOT_VERIFIED)",
+                        example: "EMAIL_NOT_VERIFIED",
+                    },
                     details: {
                         type: "array",
                         description: "Solo en errores de validación (400): un elemento por campo",
@@ -139,6 +144,11 @@ export const responses = {
     }),
     Unauthorized: errorResponse("Falta el token, o es inválido, alterado o expiró", "Unauthorized"),
     Forbidden: errorResponse("Hay sesión, pero el usuario no tiene permiso para esta acción", "Forbidden"),
+    EmailNotVerified: errorResponse(
+        "Hay sesión, pero el usuario todavía no verificó su correo",
+        "Verifica tu correo para realizar esta acción",
+        { code: "EMAIL_NOT_VERIFIED" },
+    ),
     NotFound: errorResponse("El recurso no existe", "Resource not found"),
     Conflict: errorResponse("Conflicto con el estado actual (duplicado o recursos relacionados)", "Resource already exists"),
 };
