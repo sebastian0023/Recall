@@ -18,6 +18,8 @@ const users: Prisma.UserCreateManyInput[] = [
     { id: USER(4), email: "carlos.ramirez@recall.app", name: "Carlos Ramírez" },
     { id: USER(5), email: "mariana.torres@recall.app", name: "Mariana Torres" },
     { id: USER(6), email: "diego.hernandez@recall.app", name: "Diego Hernández" },
+    // Única con el correo sin verificar, para probar el 403 EMAIL_NOT_VERIFIED y el reenvío del enlace
+    { id: USER(7), email: "laura.sanchez@recall.app", name: "Laura Sánchez", emailVerified: false },
 ];
 
 const recordings: Prisma.RecordingCreateManyInput[] = [
@@ -113,7 +115,7 @@ async function main() {
         prisma.transcription.deleteMany(),
         prisma.recording.deleteMany(),
         prisma.user.deleteMany(),
-        prisma.user.createMany({ data: users.map((user) => ({ ...user, passwordHash, emailVerified: true })) }),
+        prisma.user.createMany({ data: users.map((user) => ({ ...user, passwordHash, emailVerified: user.emailVerified ?? true })) }),
         prisma.recording.createMany({ data: recordings }),
         prisma.transcription.createMany({ data: transcriptions }),
         prisma.summary.createMany({ data: summaries }),
