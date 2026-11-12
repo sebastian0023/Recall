@@ -113,7 +113,7 @@ Todas están en `.env.example`. **Nunca se suben credenciales al repositorio** (
 
 | Entidad | Registros | Notas |
 | --- | --- | --- |
-| `User` | 6 | Uno de ellos (Diego) sin grabaciones, para probar el borrado. Todos con `emailVerified: true` |
+| `User` | 7 | Diego sin grabaciones, para probar el borrado, y Laura con el correo **sin verificar** (`emailVerified: false`), para probar el 403 `EMAIL_NOT_VERIFIED`. Los otros 5 con `emailVerified: true` |
 | `Recording` | 8 | Repartidas entre 5 usuarios y con los 4 estados (`UPLOADED`, `PROCESSING`, `DONE`, `FAILED`) |
 | `Transcription` | 5 | Una por cada grabación `DONE`, con segmentos por hablante |
 | `Summary` | 6 | De las 3 plantillas; una grabación tiene 2 resúmenes |
@@ -150,8 +150,11 @@ El rol se cambia con `PATCH /users/:id` y `{ "role": "ADMIN" }`, solo como admin
 | --- | --- | --- |
 | `sebastian@recall.app` | `ADMIN` | `Recall2026!` |
 | `ana.lopez@recall.app` | `USER` | `Recall2026!` |
+| `laura.sanchez@recall.app` | `USER`, **correo sin verificar** | `Recall2026!` |
 
-Los demás usuarios del seed (`emilio@`, `carlos.ramirez@`, `mariana.torres@`, `diego.hernandez@`, todos `@recall.app`) son `USER` y usan la misma contraseña.
+Los demás usuarios del seed (`emilio@`, `carlos.ramirez@`, `mariana.torres@`, `diego.hernandez@`, todos `@recall.app`) son `USER`, tienen el correo verificado y usan la misma contraseña.
+
+**Probar el 403 por correo sin verificar.** Inicia sesión como `laura.sanchez@recall.app` y llama `POST /recordings` (o `POST /recordings/:id/process`): responde 403 con `"code": "EMAIL_NOT_VERIFIED"`. Con ese mismo usuario, `POST /auth/resend-verification` manda el enlace a Mailpit (<http://localhost:8025>) y, al abrirlo, la acción deja de estar bloqueada. `npm run seed` la vuelve a dejar sin verificar.
 
 ```bash
 TOKEN=$(curl -s localhost:3000/api/v1/auth/login -H "Content-Type: application/json" \
@@ -290,7 +293,8 @@ El nivel se cambia con `LOG_LEVEL` en el `.env` (por defecto `info`); por ejempl
 
 [docs/api.postman_collection.json](docs/api.postman_collection.json): en Postman, **Import** → selecciona el archivo.
 
-- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales.
+- Carpetas por módulo: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales, más una carpeta por cada flujo de correo (ver abajo). En total son **129 peticiones**.
+- **Verificación de correo, Recuperar contraseña y Correo del proyecto (resumen listo):** el token solo viaja en el correo, así que estas carpetas **necesitan Mailpit** (`docker compose up -d`) y lo leen por su API (variable `{{mailpitUrl}}`, por defecto `http://localhost:8025`). Registran un usuario nuevo, leen su correo, usan el enlace y comprueban los casos de error: token inexistente, token ya usado, enlace anterior invalidado por un reenvío, `forgot-password` con correo inexistente (mismo 200 genérico), contraseña débil, la contraseña anterior que deja de servir, y la acción sin verificar (403 `EMAIL_NOT_VERIFIED`, con Laura del seed). El usuario que crean se borra al final de la carpeta Recuperar contraseña. El token expirado no se puede probar en la colección: pon `VERIFY_TOKEN_TTL=5s`, pide un enlace, espera y ábrelo (responde 400 `Token expired`).
 - Las peticiones usan el token de `{{adminToken}}`; la carpeta Permisos prueba 401 y 403 con `{{userToken}}`. Las dos variables se llenan solas: las peticiones de login de la carpeta Auth guardan el `accessToken` del admin (`adminToken`) y de Ana López (`userToken`), así que hay que correr la carpeta Auth antes que las demás (Run collection ya lo hace en orden).
 - Al menos una petición por endpoint, más los casos de error: cuerpo inválido, id inexistente, id mal formado, duplicado (409), JSON mal formado y ruta inexistente.
 - Casos de seguridad: registro con `role: "ADMIN"` (400), login sin contraseña (400), la misma respuesta para contraseña incorrecta y correo inexistente, la contraseña nunca aparece en las respuestas, sin token (401) y tokens alterados (401): `sub` cambiado, firma modificada, `alg: none` y firmado con otra clave. Los tokens alterados se generan en el *pre-request* a partir de un token real.
