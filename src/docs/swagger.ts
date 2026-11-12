@@ -6,7 +6,7 @@ import { parameters, responses, schemas } from "./schemas.js";
 
 // Carpeta raíz del código: src/ con npm run dev y dist/ después de npm run build.
 // Por eso se buscan los comentarios @openapi en archivos .ts y .js (tsconfig conserva los comentarios)
-const codeRoot = path.join(import.meta.dirname, "..");
+const codeRoot = path.join(import.meta.dirname, "..").split(path.sep).join("/");
 
 const definition = {
     openapi: "3.0.3",
@@ -49,7 +49,7 @@ const definition = {
 
 export const openapiSpec = swaggerJSDoc({
     definition,
-    apis: [path.join(codeRoot, "routes/*.{ts,js}"), path.join(codeRoot, "app.{ts,js}")],
+    apis: [`${codeRoot}/routes/*.{ts,js}`, `${codeRoot}/app.{ts,js}`],
     failOnErrors: true, // un comentario @openapi con YAML inválido detiene el arranque en lugar de desaparecer en silencio
 });
 
