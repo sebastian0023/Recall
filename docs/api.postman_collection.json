@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Recall API",
-    "description": "Colección del API de Recall (Entrega: Persistencia de datos). Antes de correrla: `npm run seed`. Las variables `userId`, `recordingId`, etc. apuntan a los registros del seed; las `new*` se llenan solas al crear recursos. Cambia `baseUrl` si el API corre en otro puerto. Las peticiones usan {{adminToken}}; la carpeta Permisos usa {{userToken}}. Con AUTH_MODE=cognito reemplaza ambas variables por el accessToken de POST /auth/login.",
+    "description": "Colección del API de Recall. Antes de correrla: `docker compose up -d` (PostgreSQL y Mailpit) y `npm run seed`. Las variables `userId`, `recordingId`, etc. apuntan a los registros del seed; las `new*` y `flow*` se llenan solas al crear recursos. Cambia `baseUrl` si el API corre en otro puerto y `mailpitUrl` si Mailpit no está en http://localhost:8025. Las peticiones usan {{adminToken}}; la carpeta Permisos usa {{userToken}}. Las carpetas Verificación de correo, Recuperar contraseña y Correo del proyecto leen los correos del API desde Mailpit.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -520,6 +520,1493 @@
               ]
             },
             "description": "Requiere Authorization: Bearer <accessToken>. La colección usa {{adminToken}}."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verificación de correo",
+      "description": "Necesita Mailpit (docker compose up -d): el token solo viaja en el correo, así que la colección lo lee de ahí. Registra un usuario nuevo, verifica su correo y lo borra al final de la carpeta Recuperar contraseña.",
+      "item": [
+        {
+          "name": "Registrar usuario (queda sin verificar)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"flowEmail\", \"flujo.\" + Date.now() + \"@recall.app\");",
+                  "pm.collectionVariables.set(\"mailId\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "const user = pm.response.json().data;",
+                  "pm.test(\"Nace con el correo sin verificar\", () => pm.expect(user.emailVerified).to.eql(false));",
+                  "pm.test(\"La contraseña nunca está en la respuesta\", () => pm.expect(pm.response.text()).to.not.match(/password/i));",
+                  "pm.collectionVariables.set(\"flowUserId\", user.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"Recall2026!\",\n  \"name\": \"Usuario del Flujo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login sin verificar (no se bloquea)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"flowToken\", pm.response.json().data.accessToken);",
+                  "pm.test(\"Entra aunque no haya verificado\", () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"Recall2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Mi perfil incluye emailVerified: false",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"emailVerified es false\", () => pm.expect(pm.response.json().data.emailVerified).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{flowToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mailpit: correo de verificación llegó",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mailpit (docker compose up -d) guarda los correos que manda el API; aquí se espera al correo nuevo",
+                  "const base = pm.collectionVariables.get(\"mailpitUrl\");",
+                  "const previous = pm.collectionVariables.get(\"mailId\");",
+                  "const query = \"to:\" + pm.collectionVariables.get(\"flowEmail\");",
+                  "function attempt(n) {",
+                  "    pm.sendRequest(base + \"/api/v1/search?query=\" + encodeURIComponent(query), (err, res) => {",
+                  "        const m = !err && res.code === 200 ? res.json().messages[0] : undefined;",
+                  "        if (m && (m.ID !== previous && m.Subject.toLowerCase().includes(\"verifica\"))) pm.collectionVariables.set(\"mailId\", m.ID);",
+                  "        else if (n < 20) setTimeout(() => attempt(n + 1), 300);",
+                  "        else pm.collectionVariables.set(\"mailId\", \"no-llego-el-correo\");",
+                  "    });",
+                  "}",
+                  "attempt(0);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Llega a quien se registró\", () => pm.expect(body.To[0].Address).to.eql(pm.collectionVariables.get(\"flowEmail\")));",
+                  "pm.test(\"Asunto claro con el nombre del proyecto\", () => { pm.expect(body.Subject).to.include(\"Recall\"); pm.expect(body.Subject.toLowerCase()).to.include(\"verifica\"); });",
+                  "pm.test(\"Trae versión HTML y versión de texto\", () => { pm.expect(body.HTML).to.include(\"<html\"); pm.expect(body.Text).to.be.a(\"string\").and.not.empty; });",
+                  "const m = /[?&]token=([0-9a-f]{64})/.exec(body.Text);",
+                  "pm.test(\"El enlace lleva un token de 32 bytes en hex\", () => pm.expect(m).to.not.equal(null));",
+                  "if (m) pm.collectionVariables.set(\"verifyTokenOld\", m[1]);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "message",
+                "{{mailId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Reenviar verificación - sin sesión (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Reenviar verificación (invalida el enlace anterior)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Se manda un correo nuevo\", () => pm.expect(pm.response.json().message).to.eql(\"Verification email sent\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{flowToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mailpit: llegó un enlace nuevo",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mailpit (docker compose up -d) guarda los correos que manda el API; aquí se espera al correo nuevo",
+                  "const base = pm.collectionVariables.get(\"mailpitUrl\");",
+                  "const previous = pm.collectionVariables.get(\"mailId\");",
+                  "const query = \"to:\" + pm.collectionVariables.get(\"flowEmail\");",
+                  "function attempt(n) {",
+                  "    pm.sendRequest(base + \"/api/v1/search?query=\" + encodeURIComponent(query), (err, res) => {",
+                  "        const m = !err && res.code === 200 ? res.json().messages[0] : undefined;",
+                  "        if (m && (m.ID !== previous && m.Subject.toLowerCase().includes(\"verifica\"))) pm.collectionVariables.set(\"mailId\", m.ID);",
+                  "        else if (n < 20) setTimeout(() => attempt(n + 1), 300);",
+                  "        else pm.collectionVariables.set(\"mailId\", \"no-llego-el-correo\");",
+                  "    });",
+                  "}",
+                  "attempt(0);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const m = /[?&]token=([0-9a-f]{64})/.exec(body.Text);",
+                  "pm.test(\"El enlace nuevo es distinto al anterior\", () => { pm.expect(m).to.not.equal(null); pm.expect(m[1]).to.not.eql(pm.collectionVariables.get(\"verifyTokenOld\")); });",
+                  "if (m) pm.collectionVariables.set(\"verifyToken\", m[1]);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "message",
+                "{{mailId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verificar correo - el enlace anterior ya no sirve (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verifyTokenOld}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verificar correo - token inexistente (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"0000000000000000000000000000000000000000000000000000000000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verificar correo - token con formato inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Indica el campo token\", () => pm.expect(pm.response.json().error.details[0].field).to.eql(\"token\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verificar correo - sin token (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verificar correo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"El correo queda verificado\", () => pm.expect(pm.response.json().data.emailVerified).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Verificar correo - token ya usado (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Token already used\", () => pm.expect(pm.response.json().error.message).to.eql(\"Token already used\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verifyToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Mi perfil: emailVerified pasó a true",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"emailVerified es true\", () => pm.expect(pm.response.json().data.emailVerified).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{flowToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reenviar verificación - ya verificado (200, no envía nada)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Avisa que ya estaba verificado\", () => pm.expect(pm.response.json().message).to.eql(\"Email already verified\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "resend-verification"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{flowToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login usuaria sin verificar del seed (Laura)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set(\"unverifiedToken\", pm.response.json().data.accessToken);",
+                  "pm.test(\"Laura tiene el correo sin verificar\", () => pm.expect(pm.response.json().data.user.emailVerified).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"laura.sanchez@recall.app\",\n  \"password\": \"Recall2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Sin verificar - crear grabación (403 EMAIL_NOT_VERIFIED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"Mensaje: Verifica tu correo para realizar esta acción\", () => pm.expect(pm.response.json().error.message).to.eql(\"Verifica tu correo para realizar esta acción\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));",
+                  "pm.test(\"code distingue el motivo\", () => pm.expect(pm.response.json().error.code).to.eql(\"EMAIL_NOT_VERIFIED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recordings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recordings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Grabación que no debería crearse\",\n  \"s3Key\": \"audio/postman/sin-verificar.mp3\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{unverifiedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sin verificar - procesar grabación (403 EMAIL_NOT_VERIFIED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"Mensaje: Verifica tu correo para realizar esta acción\", () => pm.expect(pm.response.json().error.message).to.eql(\"Verifica tu correo para realizar esta acción\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));",
+                  "pm.test(\"code distingue el motivo\", () => pm.expect(pm.response.json().error.code).to.eql(\"EMAIL_NOT_VERIFIED\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recordings/{{missingId}}/process",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recordings",
+                "{{missingId}}",
+                "process"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{unverifiedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sin verificar - sí puede ver sus grabaciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/recordings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "recordings"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{unverifiedToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recuperar contraseña",
+      "description": "Usa el usuario que creó la carpeta Verificación de correo (y lo borra al final). Necesita Mailpit.",
+      "item": [
+        {
+          "name": "Olvidé mi contraseña - correo inexistente (200 genérico)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Mismo mensaje que si existiera\", () => pm.expect(pm.response.json().message).to.eql(\"Si el correo está registrado, recibirás un enlace\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nadie.{{$timestamp}}@recall.app\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Olvidé mi contraseña - correo registrado (200 genérico)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Mismo mensaje que si no existiera\", () => pm.expect(pm.response.json().message).to.eql(\"Si el correo está registrado, recibirás un enlace\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{flowEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Olvidé mi contraseña - correo inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"no-es-un-correo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Mailpit: correo de restablecimiento llegó",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mailpit (docker compose up -d) guarda los correos que manda el API; aquí se espera al correo nuevo",
+                  "const base = pm.collectionVariables.get(\"mailpitUrl\");",
+                  "const previous = pm.collectionVariables.get(\"mailId\");",
+                  "const query = \"to:\" + pm.collectionVariables.get(\"flowEmail\");",
+                  "function attempt(n) {",
+                  "    pm.sendRequest(base + \"/api/v1/search?query=\" + encodeURIComponent(query), (err, res) => {",
+                  "        const m = !err && res.code === 200 ? res.json().messages[0] : undefined;",
+                  "        if (m && (m.ID !== previous && m.Subject.toLowerCase().includes(\"restablece\"))) pm.collectionVariables.set(\"mailId\", m.ID);",
+                  "        else if (n < 20) setTimeout(() => attempt(n + 1), 300);",
+                  "        else pm.collectionVariables.set(\"mailId\", \"no-llego-el-correo\");",
+                  "    });",
+                  "}",
+                  "attempt(0);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Llega al dueño de la cuenta\", () => pm.expect(body.To[0].Address).to.eql(pm.collectionVariables.get(\"flowEmail\")));",
+                  "pm.test(\"Asunto claro con el nombre del proyecto\", () => { pm.expect(body.Subject).to.include(\"Recall\"); pm.expect(body.Subject.toLowerCase()).to.include(\"restablece\"); });",
+                  "pm.test(\"Trae versión HTML y versión de texto\", () => { pm.expect(body.HTML).to.include(\"<html\"); pm.expect(body.Text).to.be.a(\"string\").and.not.empty; });",
+                  "const m = /\\/reset-password\\?token=([0-9a-f]{64})/.exec(body.Text);",
+                  "pm.test(\"El enlace apunta a /reset-password con el token\", () => pm.expect(m).to.not.equal(null));",
+                  "if (m) pm.collectionVariables.set(\"resetToken\", m[1]);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "message",
+                "{{mailId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Restablecer - contraseña débil (400, el token no se gasta)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Indica el campo password\", () => pm.expect(pm.response.json().error.details[0].field).to.eql(\"password\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Restablecer - token inexistente (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Invalid token\", () => pm.expect(pm.response.json().error.message).to.eql(\"Invalid token\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"0000000000000000000000000000000000000000000000000000000000000000\",\n  \"password\": \"NuevaClave2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Restablecer - sin token (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NuevaClave2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Restablecer contraseña",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Contraseña actualizada\", () => pm.expect(pm.response.json().message).to.eql(\"Password updated\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"NuevaClave2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Restablecer - token ya usado (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"Mensaje: Token already used\", () => pm.expect(pm.response.json().error.message).to.eql(\"Token already used\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"password\": \"OtraClave2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login con la contraseña anterior (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"Mensaje: Incorrect email or password\", () => pm.expect(pm.response.json().error.message).to.eql(\"Incorrect email or password\"));",
+                  "pm.test(\"El error trae requestId\", () => pm.expect(pm.response.json().error.requestId).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"Recall2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login con la contraseña nueva",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"NuevaClave2026!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Limpieza: eliminar el usuario del flujo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{flowUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{flowUserId}}"
+              ]
+            }
           }
         }
       ]
@@ -2574,6 +4061,155 @@
       ]
     },
     {
+      "name": "Correo del proyecto (resumen listo)",
+      "description": "Al crear un resumen, el API avisa por correo al DUEÑO de la grabación (no a quien hace la petición). Necesita Mailpit.",
+      "item": [
+        {
+          "name": "Crear resumen en una grabación de Ana (como admin)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"summaryMarker\", \"marcador\" + Date.now());",
+                  "pm.collectionVariables.set(\"mailId\", \"\");"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"mailSummaryId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/summaries",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "summaries"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recordingId\": \"{{regularRecordingId}}\",\n  \"template\": \"MEETING\",\n  \"content\": \"Acuerdos de prueba {{summaryMarker}}: revisar el correo que manda el API.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Mailpit: el correo \"Tu resumen está listo\" llegó al dueño",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Mailpit (docker compose up -d) guarda los correos que manda el API; aquí se espera al correo nuevo",
+                  "const base = pm.collectionVariables.get(\"mailpitUrl\");",
+                  "const previous = pm.collectionVariables.get(\"mailId\");",
+                  "const query = pm.collectionVariables.get(\"summaryMarker\");",
+                  "function attempt(n) {",
+                  "    pm.sendRequest(base + \"/api/v1/search?query=\" + encodeURIComponent(query), (err, res) => {",
+                  "        const m = !err && res.code === 200 ? res.json().messages[0] : undefined;",
+                  "        if (m && (m.ID !== previous)) pm.collectionVariables.set(\"mailId\", m.ID);",
+                  "        else if (n < 20) setTimeout(() => attempt(n + 1), 300);",
+                  "        else pm.collectionVariables.set(\"mailId\", \"no-llego-el-correo\");",
+                  "    });",
+                  "}",
+                  "attempt(0);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Llega al dueño de la grabación, no a quien hizo la petición\", () => pm.expect(body.To[0].Address).to.eql(\"ana.lopez@recall.app\"));",
+                  "pm.test(\"El asunto trae el título de la grabación y el nombre del proyecto\", () => { pm.expect(body.Subject).to.include(\"Recall\"); pm.expect(body.Subject).to.include(\"Reunión con asesor de tesis\"); pm.expect(body.Subject).to.include(\"listo\"); });",
+                  "pm.test(\"Trae un extracto del resumen\", () => { pm.expect(body.Text).to.include(pm.collectionVariables.get(\"summaryMarker\")); pm.expect(body.HTML).to.include(pm.collectionVariables.get(\"summaryMarker\")); });",
+                  "pm.test(\"Enlaza a la grabación\", () => pm.expect(body.Text).to.include(\"/recordings/\" + pm.collectionVariables.get(\"regularRecordingId\")));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mailpitUrl}}/api/v1/message/{{mailId}}",
+              "host": [
+                "{{mailpitUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "message",
+                "{{mailId}}"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Limpieza: eliminar el resumen creado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/summaries/{{mailSummaryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "summaries",
+                "{{mailSummaryId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Permisos",
       "description": "Casos 401 y 403. {{userToken}} es Ana López (USER) y {{adminToken}} es Sebastián Macías (ADMIN); los guarda la carpeta Auth. Los tokens alterados se generan en el pre-request a partir de un token real. El token expirado no se puede automatizar aquí: se prueba a mano con JWT_EXPIRES_IN=5s (ver README).",
       "item": [
@@ -3910,6 +5546,50 @@
     },
     {
       "key": "loginErrorBody",
+      "value": ""
+    },
+    {
+      "key": "mailpitUrl",
+      "value": "http://localhost:8025"
+    },
+    {
+      "key": "flowEmail",
+      "value": ""
+    },
+    {
+      "key": "flowUserId",
+      "value": ""
+    },
+    {
+      "key": "flowToken",
+      "value": ""
+    },
+    {
+      "key": "unverifiedToken",
+      "value": ""
+    },
+    {
+      "key": "verifyToken",
+      "value": ""
+    },
+    {
+      "key": "verifyTokenOld",
+      "value": ""
+    },
+    {
+      "key": "resetToken",
+      "value": ""
+    },
+    {
+      "key": "mailId",
+      "value": ""
+    },
+    {
+      "key": "summaryMarker",
+      "value": ""
+    },
+    {
+      "key": "mailSummaryId",
       "value": ""
     }
   ],

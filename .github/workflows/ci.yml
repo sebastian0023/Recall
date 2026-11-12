@@ -78,6 +78,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # Servidor SMTP de pruebas: la colección de Postman lee de su API los correos con los tokens
+      mailpit:
+        image: axllent/mailpit:v1.33.1
+        ports:
+          - 1025:1025
+          - 8025:8025
     steps:
       - uses: actions/checkout@v4
 
@@ -133,8 +139,9 @@ jobs:
 
       - name: El log no contiene contraseñas ni tokens
         run: |
-          if grep -E 'Recall2026!|eyJhbGci' server.log; then
-            echo "El log contiene la contraseña del seed o un JWT"
+          # 64 hex seguidos = token de verificación o de restablecimiento (los ids de petición son UUID, con guiones)
+          if grep -E 'Recall2026!|NuevaClave2026!|eyJhbGci|[0-9a-f]{64}' server.log; then
+            echo "El log contiene una contraseña, un JWT o un token de un solo uso"
             exit 1
           fi
 
