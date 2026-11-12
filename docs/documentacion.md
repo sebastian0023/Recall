@@ -56,6 +56,8 @@ Recall es el REST API de una plataforma web que recibe audio de reuniones, clase
 | Tokens de un solo uso | No había | Tabla `AuthToken`: solo se guarda el sha256 del token, vence y sirve una sola vez |
 | Logging | `console.log` | pino: una línea por petición con su id (`X-Request-Id`), niveles por `LOG_LEVEL`, JSON en producción y redacción de secretos |
 | Documentación del API | Solo el README | Swagger (OpenAPI 3) en `/docs` con Authorize, generado desde comentarios `@openapi` junto a cada ruta |
+| Colección de Postman | 95 peticiones | 129 peticiones: carpetas de verificación de correo, recuperar contraseña y correo del proyecto, que leen los correos desde Mailpit |
+| Seed | 6 usuarios, todos verificados | 7 usuarios: se agrega Laura Sánchez con el correo sin verificar, para probar el 403 |
 | Base de datos | 4 tablas, 5 migraciones | 5 tablas (se agrega `AuthToken`), 6 migraciones |
 
 ## Datos generales
@@ -499,11 +501,13 @@ Sin sesión, las vistas protegidas redirigen a `/login`. La barra muestra el nom
 
 ### Seed
 
-`npm run seed` (`prisma/seed.ts`) limpia las 4 tablas y vuelve a cargar los mismos registros en una transacción, por lo que se puede correr varias veces sin errores ni duplicados: 6 usuarios, 8 grabaciones (con los 4 estados), 5 transcripciones y 6 resúmenes de las 3 plantillas. Todos los usuarios usan la contraseña `Recall2026!`, guardada con bcrypt, y tienen el correo verificado para que las pruebas no se bloqueen. Sebastián Macías es `ADMIN`; los demás, `USER`.
+`npm run seed` (`prisma/seed.ts`) limpia las 5 tablas y vuelve a cargar los mismos registros en una transacción, por lo que se puede correr varias veces sin errores ni duplicados: 7 usuarios, 8 grabaciones (con los 4 estados), 5 transcripciones y 6 resúmenes de las 3 plantillas. Todos los usuarios usan la contraseña `Recall2026!`, guardada con bcrypt, y tienen el correo verificado para que las pruebas no se bloqueen, excepto Laura Sánchez (`laura.sanchez@recall.app`), que queda con el correo **sin verificar** para probar el 403 `EMAIL_NOT_VERIFIED`. Sebastián Macías es `ADMIN`; los demás, `USER`.
 
 ### Colección de Postman
 
-`docs/api.postman_collection.json` tiene **95 peticiones** en 8 carpetas: Health, Auth, Users, Recordings, Transcriptions, Summaries, Permisos y Errores generales. La URL base está en la variable `{{baseUrl}}`, y los tokens de admin y de usuario se guardan solos al correr la carpeta Auth.
+`docs/api.postman_collection.json` tiene **129 peticiones** en 11 carpetas: Health, Auth, Verificación de correo, Recuperar contraseña, Users, Recordings, Transcriptions, Summaries, Correo del proyecto (resumen listo), Permisos y Errores generales. La URL base está en la variable `{{baseUrl}}`, y los tokens de admin y de usuario se guardan solos al correr la carpeta Auth.
+
+Las tres carpetas de correo (34 peticiones) **necesitan Mailpit** (`docker compose up -d`): el token solo viaja en el correo, así que la colección lo lee de la API de Mailpit (variable `{{mailpitUrl}}`). Registran un usuario nuevo, leen su correo, usan el enlace y comprueban los casos de error: token inexistente, token ya usado, enlace anterior invalidado por un reenvío, `forgot-password` con un correo inexistente (el mismo 200 genérico), contraseña débil, la contraseña anterior que deja de servir y la acción sin verificar (403 `EMAIL_NOT_VERIFIED`, con la usuaria del seed). El usuario que crean se borra al final. El token expirado no se automatiza: se prueba a mano con `VERIFY_TOKEN_TTL=5s`.
 
 | Caso de seguridad | Respuesta esperada |
 | --- | --- |
@@ -522,7 +526,7 @@ Los tokens alterados se generan en el *pre-request* a partir de un token real, a
 
 ## Pruebas y evidencia
 
-Las pruebas de las evidencias 1 a 9 se corrieron el 5 de noviembre de 2026 en una base PostgreSQL 17 desechable, con las 5 migraciones aplicadas y los datos del seed. Las imágenes de terminal son la salida real de los comandos, y las de las vistas son capturas del navegador con la aplicación en ejecución.
+Las pruebas de las evidencias 1 a 9 (salvo la 2, repetida el 11 de noviembre con la colección final) se corrieron el 5 de noviembre de 2026 en una base PostgreSQL 17 desechable, con las 5 migraciones aplicadas y los datos del seed. Las imágenes de terminal son la salida real de los comandos, y las de las vistas son capturas del navegador con la aplicación en ejecución.
 
 ### Entrega 2: autenticación y permisos
 
@@ -534,11 +538,11 @@ Las pruebas de las evidencias 1 a 9 se corrieron el 5 de noviembre de 2026 en un
 
 #### Colección de Postman
 
-Corrieron las 95 peticiones con newman: 163 aserciones y ninguna falla. La imagen muestra los casos de seguridad y el resumen de toda la colección.
+Corrieron las 129 peticiones con newman: 242 aserciones y ninguna falla (newman cuenta 133 requests porque 4 son consultas a Mailpit de los scripts). Esta evidencia se repitió el 11 de noviembre de 2026, con el código final de `main` y Mailpit en Docker. La imagen muestra una selección de los casos de seguridad, las tres carpetas de correo y el resumen de toda la colección.
 
 ![Colección de Postman](img/evidencias/prueba-newman.png)
 
-<p class="caption">Evidencia 2 · Casos de seguridad de la colección y resumen de las 95 peticiones</p>
+<p class="caption">Evidencia 2 · Casos de seguridad, flujos de correo y resumen de las 129 peticiones</p>
 
 #### Vista de registro
 
@@ -659,7 +663,7 @@ Además, se buscaron en las líneas del log de todas las pruebas las contraseña
 
 | Workflow | Qué revisa |
 | --- | --- |
-| `ci.yml` | ESLint; `prisma validate`, typecheck y build; con un PostgreSQL de servicio aplica las migraciones, corre el seed dos veces, arranca el API, corre la colección de Postman con newman y revisa que las vistas muestren datos con una sesión real. |
+| `ci.yml` | ESLint; `prisma validate`, typecheck y build; con un PostgreSQL y un Mailpit de servicio aplica las migraciones, corre el seed dos veces, arranca el API, corre la colección de Postman con newman y revisa que las vistas muestren datos con una sesión real. |
 | `sonarqube.yml` | Análisis de SonarQube Cloud (bugs, code smells, duplicación y vulnerabilidades) con quality gate: si no pasa, el workflow falla. |
 | `docker.yml` | Construye la imagen del API; en push a `develop` o `main` la publica en GitHub Container Registry. |
 
